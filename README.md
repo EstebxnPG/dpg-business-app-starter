@@ -62,3 +62,5 @@ Run the initial checks with:
 .\.venv\Scripts\python -m ruff check .
 .\.venv\Scripts\python -m ruff format --check .
 ```
+
+Catalog constraint tests use PostgreSQL when `DATABASE_URL` is set. They are skipped when no database URL is configured.
