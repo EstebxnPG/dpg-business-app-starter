@@ -38,4 +38,24 @@ The current direction is a modular monolith in Python with FastAPI and PostgreSQ
 4. Record significant choices in [`decisions/`](decisions/README.md), including alternatives and consequences.
 5. Revisit assumptions when a real client or a second application exposes different needs. Reuse is a goal to validate, not a reason to generalize every component now.
 
-The repository is currently in its definition phase. Setup and run instructions will be added with the first executable application.
+## Run locally
+
+Python 3.11 or newer and a running Docker engine are required. From the repository root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -e ".[dev]"
+docker compose up -d --wait db
+$env:DATABASE_URL = "postgresql+psycopg://dpg_dev:dpg_dev@127.0.0.1:5433/dpg_app"
+.\.venv\Scripts\python -m uvicorn app.main:app --reload
+```
+
+Open `http://127.0.0.1:8000/docs` for the interactive API documentation. `GET /health` confirms that the API process responds. `GET /ready` returns 200 only when the API can query PostgreSQL; it returns 503 otherwise. The Compose credentials are for local development only. Do not reuse them for a deployed instance.
+
+Run the initial checks with:
+
+```powershell
+.\.venv\Scripts\python -m pytest
+.\.venv\Scripts\python -m ruff check .
+.\.venv\Scripts\python -m ruff format --check .
+```

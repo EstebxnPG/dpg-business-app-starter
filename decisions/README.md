@@ -8,6 +8,7 @@ This directory records decisions that affect the product or its architecture. Ea
 | --- | --- | --- |
 | 0001 | [Build a reusable backend through an inventory reference workflow](0001-inventory-reference-workflow.md) | Accepted |
 | 0002 | [Keep inventory balances and movements consistent](0002-inventory-balance-and-movements.md) | Accepted |
+| 0003 | [Assign access through organization memberships](0003-organization-memberships.md) | Accepted |
 
 ## Recording a decision
 
