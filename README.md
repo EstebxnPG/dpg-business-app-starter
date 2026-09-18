@@ -47,10 +47,13 @@ python -m venv .venv
 .\.venv\Scripts\python -m pip install -e ".[dev]"
 docker compose up -d --wait db
 $env:DATABASE_URL = "postgresql+psycopg://dpg_dev:dpg_dev@127.0.0.1:5433/dpg_app"
+.\.venv\Scripts\python -m alembic upgrade head
 .\.venv\Scripts\python -m uvicorn app.main:app --reload
 ```
 
 Open `http://127.0.0.1:8000/docs` for the interactive API documentation. `GET /health` confirms that the API process responds. `GET /ready` returns 200 only when the API can query PostgreSQL; it returns 503 otherwise. The Compose credentials are for local development only. Do not reuse them for a deployed instance.
+
+Each schema change is recorded in `migrations/versions/` and applied with `alembic upgrade head`. Review generated migration files before applying them; autogeneration does not decide whether a schema change is correct for the business.
 
 Run the initial checks with:
 
