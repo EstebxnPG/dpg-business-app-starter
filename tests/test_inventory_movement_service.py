@@ -49,7 +49,7 @@ def test_movements_update_balance_and_history_atomically() -> None:
             insert(Membership).values(
                 organization_id=organization_id,
                 user_id=user_id,
-                role="operator",
+                role="warehouse_manager",
             )
         )
         connection.execute(

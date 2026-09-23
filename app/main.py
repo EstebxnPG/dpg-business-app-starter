@@ -4,7 +4,9 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 
+from app.core.authorization import OrganizationNotFoundError, PermissionDeniedError
 from app.core.errors import error_response
 from app.core.security import InvalidCredentialsError
 from app.database import database_ready
@@ -50,6 +52,43 @@ async def invalid_credentials_handler(
     )
     response.headers["WWW-Authenticate"] = "Bearer"
     return response
+
+
+@app.exception_handler(OrganizationNotFoundError)
+async def organization_not_found_handler(
+    request: Request, error: OrganizationNotFoundError
+) -> JSONResponse:
+    return error_response(
+        request,
+        status_code=404,
+        code="ORGANIZATION_NOT_FOUND",
+        message="The organization is unavailable.",
+    )
+
+
+@app.exception_handler(PermissionDeniedError)
+async def permission_denied_handler(
+    request: Request, error: PermissionDeniedError
+) -> JSONResponse:
+    return error_response(
+        request,
+        status_code=403,
+        code="PERMISSION_DENIED",
+        message="The user cannot perform this action.",
+        details={"required_permission": error.permission},
+    )
+
+
+@app.exception_handler(OperationalError)
+async def database_unavailable_handler(
+    request: Request, error: OperationalError
+) -> JSONResponse:
+    return error_response(
+        request,
+        status_code=503,
+        code="DATABASE_UNAVAILABLE",
+        message="The service is temporarily unavailable.",
+    )
 
 
 @app.get("/health", tags=["system"])

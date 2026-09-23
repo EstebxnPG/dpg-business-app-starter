@@ -79,6 +79,8 @@ It requires an `Idempotency-Key` header and an access token in `Authorization: B
 
 A new movement returns 201. A safe replay returns the original result with 200. Business and validation errors use a stable envelope containing `code`, `message`, `details`, and `request_id`.
 
+Organization access is resolved from the authenticated user's membership. Inventory receipts and issues are available to `admin` and `warehouse_manager`; `salesperson` can read inventory but cannot create movements directly. Missing organization access returns 404 to avoid exposing private organization identifiers, while a known member without the required permission receives 403.
+
 Run the initial checks with:
 
 ```powershell

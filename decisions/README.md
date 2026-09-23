@@ -12,6 +12,7 @@ This directory records decisions that affect the product or its architecture. Ea
 | 0004 | [Enforce inventory ownership in the database](0004-enforce-inventory-ownership-in-database.md) | Accepted |
 | 0005 | [Make inventory movements idempotent](0005-idempotent-inventory-movements.md) | Accepted |
 | 0006 | [Authenticate API users with signed access tokens](0006-authenticate-api-users-with-signed-tokens.md) | Accepted |
+| 0007 | [Authorize organization actions with fixed role policies](0007-authorize-organization-actions-with-fixed-role-policies.md) | Accepted |
 
 ## Recording a decision
 

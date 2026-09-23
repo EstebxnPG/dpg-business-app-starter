@@ -5,7 +5,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.modules.inventory.router as inventory_router
-from app.core.security import CurrentUser, get_current_user
+from app.core.authorization import (
+    CurrentMembership,
+    OrganizationNotFoundError,
+    get_current_membership,
+)
 from app.database import get_engine
 from app.main import app
 from app.modules.inventory.service import (
@@ -17,10 +21,13 @@ from app.modules.inventory.service import (
 
 @pytest.fixture
 def client():
-    app.dependency_overrides[get_engine] = lambda: object()
-    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        id=uuid4(), email="operator@example.com"
+    membership = CurrentMembership(
+        organization_id=uuid4(),
+        user_id=uuid4(),
+        role="warehouse_manager",
     )
+    app.dependency_overrides[get_engine] = lambda: object()
+    app.dependency_overrides[get_current_membership] = lambda: membership
     try:
         yield TestClient(app)
     finally:
@@ -132,3 +139,38 @@ def test_validation_errors_have_stable_contract(client) -> None:
     assert response.status_code == 422
     assert response.json()["code"] == "VALIDATION_ERROR"
     assert response.json()["request_id"] == "test-request-id"
+
+
+def test_member_without_movement_permission_receives_forbidden(client) -> None:
+    app.dependency_overrides[get_current_membership] = lambda: CurrentMembership(
+        organization_id=uuid4(),
+        user_id=uuid4(),
+        role="salesperson",
+    )
+
+    response = client.post(
+        f"/organizations/{uuid4()}/inventory/movements",
+        json=movement_request(),
+        headers=movement_headers(),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "PERMISSION_DENIED"
+    assert response.json()["details"] == {"required_permission": "inventory:receive"}
+
+
+def test_non_member_cannot_discover_organization(client) -> None:
+    def hide_organization():
+        raise OrganizationNotFoundError
+
+    app.dependency_overrides[get_current_membership] = hide_organization
+
+    response = client.post(
+        f"/organizations/{uuid4()}/inventory/movements",
+        json=movement_request(),
+        headers=movement_headers(),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "ORGANIZATION_NOT_FOUND"
+    assert response.json()["message"] == "The organization is unavailable."

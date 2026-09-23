@@ -3,10 +3,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Request, Response, status
 from sqlalchemy import Engine
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError
 
+from app.core.authorization import (
+    CurrentMembership,
+    Permission,
+    get_current_membership,
+    require_permission,
+)
 from app.core.errors import error_response
-from app.core.security import CurrentUser, get_current_user
 from app.database import get_engine
 from app.modules.inventory.schemas import MovementResponse, RecordMovementRequest
 from app.modules.inventory.service import (
@@ -20,13 +25,18 @@ router = APIRouter(
     prefix="/organizations/{organization_id}/inventory", tags=["inventory"]
 )
 
+MOVEMENT_PERMISSIONS = {
+    "RECEIPT": Permission.INVENTORY_RECEIVE,
+    "ISSUE": Permission.INVENTORY_ISSUE,
+}
+
 
 @router.post(
     "/movements",
     response_model=MovementResponse,
     status_code=status.HTTP_201_CREATED,
     responses={
-        403: {"description": "The actor is not a member of the organization"},
+        403: {"description": "The member lacks the required permission"},
         404: {"description": "The product or warehouse is unavailable"},
         409: {"description": "Stock or idempotency conflict"},
         503: {"description": "The database is unavailable"},
@@ -38,14 +48,16 @@ def create_movement(
     request: Request,
     response: Response,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1)],
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> MovementResponse | Response:
+    require_permission(membership, MOVEMENT_PERMISSIONS[payload.movement_type])
+
     command = RecordMovementCommand(
         organization_id=organization_id,
         product_id=payload.product_id,
         warehouse_id=payload.warehouse_id,
-        performed_by_id=current_user.id,
+        performed_by_id=membership.user_id,
         movement_type=payload.movement_type,
         quantity=payload.quantity,
         reason=payload.reason,
@@ -85,14 +97,6 @@ def create_movement(
             code="INVENTORY_CONTEXT_NOT_FOUND",
             message="The product or warehouse is unavailable in this organization.",
         )
-    except OperationalError:
-        return error_response(
-            request,
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            code="DATABASE_UNAVAILABLE",
-            message="The inventory service is temporarily unavailable.",
-        )
-
     if result.replayed:
         response.status_code = status.HTTP_200_OK
     return MovementResponse(
