@@ -20,6 +20,7 @@ class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
         UniqueConstraint("organization_id", "sku", name="uq_products_organization_sku"),
+        UniqueConstraint("organization_id", "id", name="uq_products_organization_id"),
     )
 
     id: Mapped[UUID] = mapped_column(

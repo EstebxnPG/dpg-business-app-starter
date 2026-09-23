@@ -22,6 +22,7 @@ class Warehouse(Base):
         UniqueConstraint(
             "organization_id", "code", name="uq_warehouses_organization_code"
         ),
+        UniqueConstraint("organization_id", "id", name="uq_warehouses_organization_id"),
     )
 
     id: Mapped[UUID] = mapped_column(
