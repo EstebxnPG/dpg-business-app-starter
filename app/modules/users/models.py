@@ -14,6 +14,7 @@ class User(Base):
         Uuid(as_uuid=True), primary_key=True, default=uuid4
     )
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )

@@ -1,9 +1,55 @@
-from fastapi import FastAPI
+from uuid import uuid4
+
+from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.core.errors import error_response
+from app.core.security import InvalidCredentialsError
 from app.database import database_ready
+from app.modules.auth.router import router as auth_router
+from app.modules.inventory.router import router as inventory_router
 
 app = FastAPI(title="DPG Business App Starter", version="0.1.0")
+app.include_router(auth_router)
+app.include_router(inventory_router)
+
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(
+    request: Request, error: RequestValidationError
+) -> JSONResponse:
+    return error_response(
+        request,
+        status_code=422,
+        code="VALIDATION_ERROR",
+        message="The request contains invalid data.",
+        details=jsonable_encoder(error.errors()),
+    )
+
+
+@app.exception_handler(InvalidCredentialsError)
+async def invalid_credentials_handler(
+    request: Request, error: InvalidCredentialsError
+) -> JSONResponse:
+    response = error_response(
+        request,
+        status_code=401,
+        code="INVALID_CREDENTIALS",
+        message="The credentials are invalid or expired.",
+    )
+    response.headers["WWW-Authenticate"] = "Bearer"
+    return response
 
 
 @app.get("/health", tags=["system"])

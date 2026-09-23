@@ -39,7 +39,11 @@ def test_movements_update_balance_and_history_atomically() -> None:
             insert(Organization).values(id=organization_id, name="Inventory Test")
         )
         connection.execute(
-            insert(User).values(id=user_id, email=f"{user_id}@example.com")
+            insert(User).values(
+                id=user_id,
+                email=f"{user_id}@example.com",
+                password_hash="not-used-by-this-test",
+            )
         )
         connection.execute(
             insert(Membership).values(
