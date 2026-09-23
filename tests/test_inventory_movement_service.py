@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from decimal import Decimal
 from uuid import uuid4
@@ -9,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.modules.inventory.models import StockBalance, StockMovement
 from app.modules.inventory.service import (
+    IdempotencyConflictError,
     InsufficientStockError,
     MovementType,
     RecordMovementCommand,
@@ -72,6 +74,7 @@ def test_movements_update_balance_and_history_atomically() -> None:
             movement_type=movement_type,
             quantity=Decimal(quantity),
             reason="Integration test",
+            idempotency_key=str(uuid4()),
         )
 
     try:
@@ -80,6 +83,43 @@ def test_movements_update_balance_and_history_atomically() -> None:
 
         assert receipt.balance == Decimal("10")
         assert issue.balance == Decimal("7")
+        assert receipt.replayed is False
+        assert issue.replayed is False
+
+        repeated_issue = record_stock_movement(
+            engine,
+            issue_command := replace(
+                command(MovementType.ISSUE, "3"),
+                idempotency_key="repeated-issue",
+            ),
+        )
+        replay = record_stock_movement(engine, issue_command)
+        assert repeated_issue.balance == Decimal("4")
+        assert replay == replace(repeated_issue, replayed=True)
+
+        with pytest.raises(IdempotencyConflictError):
+            record_stock_movement(
+                engine,
+                replace(issue_command, quantity=Decimal("2")),
+            )
+
+        concurrent_receipt = replace(
+            command(MovementType.RECEIPT, "2"),
+            idempotency_key="concurrent-receipt",
+        )
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            concurrent_results = list(
+                executor.map(
+                    lambda _: record_stock_movement(engine, concurrent_receipt),
+                    range(8),
+                )
+            )
+
+        assert {result.movement_id for result in concurrent_results} == {
+            concurrent_results[0].movement_id
+        }
+        assert sum(not result.replayed for result in concurrent_results) == 1
+        assert {result.balance for result in concurrent_results} == {Decimal("6")}
 
         with pytest.raises(InsufficientStockError):
             record_stock_movement(engine, command(MovementType.ISSUE, "8"))
@@ -104,8 +144,8 @@ def test_movements_update_balance_and_history_atomically() -> None:
                 .where(StockMovement.organization_id == organization_id)
             )
 
-        assert balance == Decimal("7")
-        assert movement_count == 2
+        assert balance == Decimal("6")
+        assert movement_count == 4
     finally:
         with engine.begin() as connection:
             connection.execute(

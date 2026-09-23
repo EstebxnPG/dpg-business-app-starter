@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Numeric,
     String,
+    UniqueConstraint,
     Uuid,
     func,
     text,
@@ -64,6 +65,11 @@ class StockMovement(Base):
             "movement_type IN ('RECEIPT', 'ISSUE')",
             name="ck_stock_movements_supported_type",
         ),
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_stock_movements_organization_idempotency_key",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -75,8 +81,11 @@ class StockMovement(Base):
     performed_by_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     movement_type: Mapped[str] = mapped_column(String(16), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
+    balance_after: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     reason: Mapped[str] = mapped_column(String(240), nullable=False)
     reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

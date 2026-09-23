@@ -10,6 +10,7 @@ This directory records decisions that affect the product or its architecture. Ea
 | 0002 | [Keep inventory balances and movements consistent](0002-inventory-balance-and-movements.md) | Accepted |
 | 0003 | [Assign access through organization memberships](0003-organization-memberships.md) | Accepted |
 | 0004 | [Enforce inventory ownership in the database](0004-enforce-inventory-ownership-in-database.md) | Accepted |
+| 0005 | [Make inventory movements idempotent](0005-idempotent-inventory-movements.md) | Accepted |
 
 ## Recording a decision
 
