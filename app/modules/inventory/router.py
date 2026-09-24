@@ -5,30 +5,22 @@ from fastapi import APIRouter, Depends, Header, Request, Response, status
 from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 
-from app.core.authorization import (
-    CurrentMembership,
-    Permission,
-    get_current_membership,
-    require_permission,
-)
+from app.core.authorization import CurrentMembership, get_current_membership
 from app.core.errors import error_response
 from app.database import get_engine
 from app.modules.inventory.schemas import MovementResponse, RecordMovementRequest
 from app.modules.inventory.service import (
     IdempotencyConflictError,
     InsufficientStockError,
-    RecordMovementCommand,
-    record_stock_movement,
+)
+from app.modules.inventory.use_cases import (
+    RecordManualMovementCommand,
+    record_manual_stock_movement,
 )
 
 router = APIRouter(
     prefix="/organizations/{organization_id}/inventory", tags=["inventory"]
 )
-
-MOVEMENT_PERMISSIONS = {
-    "RECEIPT": Permission.INVENTORY_RECEIVE,
-    "ISSUE": Permission.INVENTORY_ISSUE,
-}
 
 
 @router.post(
@@ -51,13 +43,10 @@ def create_movement(
     membership: Annotated[CurrentMembership, Depends(get_current_membership)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> MovementResponse | Response:
-    require_permission(membership, MOVEMENT_PERMISSIONS[payload.movement_type])
-
-    command = RecordMovementCommand(
+    command = RecordManualMovementCommand(
         organization_id=organization_id,
         product_id=payload.product_id,
         warehouse_id=payload.warehouse_id,
-        performed_by_id=membership.user_id,
         movement_type=payload.movement_type,
         quantity=payload.quantity,
         reason=payload.reason,
@@ -66,7 +55,7 @@ def create_movement(
     )
 
     try:
-        result = record_stock_movement(engine, command)
+        result = record_manual_stock_movement(engine, membership, command)
     except InsufficientStockError:
         return error_response(
             request,

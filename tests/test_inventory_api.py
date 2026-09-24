@@ -55,8 +55,8 @@ def test_create_movement_returns_created_result(client, monkeypatch) -> None:
     movement_id = uuid4()
     monkeypatch.setattr(
         inventory_router,
-        "record_stock_movement",
-        lambda engine, command: MovementResult(
+        "record_manual_stock_movement",
+        lambda engine, membership, command: MovementResult(
             movement_id=movement_id,
             balance=Decimal("10"),
             replayed=False,
@@ -84,8 +84,8 @@ def test_replayed_movement_returns_original_result_with_ok_status(
     movement_id = uuid4()
     monkeypatch.setattr(
         inventory_router,
-        "record_stock_movement",
-        lambda engine, command: MovementResult(
+        "record_manual_stock_movement",
+        lambda engine, membership, command: MovementResult(
             movement_id=movement_id,
             balance=Decimal("10"),
             replayed=True,
@@ -113,10 +113,10 @@ def test_replayed_movement_returns_original_result_with_ok_status(
 def test_business_errors_have_stable_contract(
     client, monkeypatch, exception, expected_code
 ) -> None:
-    def raise_error(engine, command):
+    def raise_error(engine, membership, command):
         raise exception
 
-    monkeypatch.setattr(inventory_router, "record_stock_movement", raise_error)
+    monkeypatch.setattr(inventory_router, "record_manual_stock_movement", raise_error)
 
     response = client.post(
         f"/organizations/{uuid4()}/inventory/movements",
@@ -142,14 +142,15 @@ def test_validation_errors_have_stable_contract(client) -> None:
 
 
 def test_member_without_movement_permission_receives_forbidden(client) -> None:
+    organization_id = uuid4()
     app.dependency_overrides[get_current_membership] = lambda: CurrentMembership(
-        organization_id=uuid4(),
+        organization_id=organization_id,
         user_id=uuid4(),
         role="salesperson",
     )
 
     response = client.post(
-        f"/organizations/{uuid4()}/inventory/movements",
+        f"/organizations/{organization_id}/inventory/movements",
         json=movement_request(),
         headers=movement_headers(),
     )

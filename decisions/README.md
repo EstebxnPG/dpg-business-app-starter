@@ -13,6 +13,7 @@ This directory records decisions that affect the product or its architecture. Ea
 | 0005 | [Make inventory movements idempotent](0005-idempotent-inventory-movements.md) | Accepted |
 | 0006 | [Authenticate API users with signed access tokens](0006-authenticate-api-users-with-signed-tokens.md) | Accepted |
 | 0007 | [Authorize organization actions with fixed role policies](0007-authorize-organization-actions-with-fixed-role-policies.md) | Accepted |
+| 0008 | [Coordinate business actions in application use cases](0008-coordinate-business-actions-in-application-use-cases.md) | Accepted |
 
 ## Recording a decision
 
