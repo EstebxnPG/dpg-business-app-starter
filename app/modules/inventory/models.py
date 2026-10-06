@@ -6,6 +6,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
+    Index,
     Numeric,
     String,
     UniqueConstraint,
@@ -69,6 +70,14 @@ class StockMovement(Base):
             "organization_id",
             "idempotency_key",
             name="uq_stock_movements_organization_idempotency_key",
+        ),
+        Index(
+            "ix_stock_movements_inventory_history",
+            "organization_id",
+            "product_id",
+            "warehouse_id",
+            "created_at",
+            "id",
         ),
     )
 

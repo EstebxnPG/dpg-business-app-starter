@@ -1,26 +1,44 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Request, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
 from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 
 from app.core.authorization import CurrentMembership, get_current_membership
 from app.core.errors import error_response
 from app.database import get_engine
-from app.modules.inventory.schemas import MovementResponse, RecordMovementRequest
+from app.modules.inventory.schemas import (
+    MovementHistoryResponse,
+    MovementResponse,
+    RecordMovementRequest,
+    StockBalanceResponse,
+)
 from app.modules.inventory.service import (
     IdempotencyConflictError,
     InsufficientStockError,
 )
 from app.modules.inventory.use_cases import (
+    InvalidMovementCursorError,
+    InventoryContextNotFoundError,
     RecordManualMovementCommand,
+    get_stock_position,
+    list_stock_movements,
     record_manual_stock_movement,
 )
 
 router = APIRouter(
     prefix="/organizations/{organization_id}/inventory", tags=["inventory"]
 )
+
+
+def inventory_context_not_found(request: Request) -> Response:
+    return error_response(
+        request,
+        status_code=status.HTTP_404_NOT_FOUND,
+        code="INVENTORY_CONTEXT_NOT_FOUND",
+        message="The product or warehouse is unavailable in this organization.",
+    )
 
 
 @router.post(
@@ -80,16 +98,63 @@ def create_movement(
                 code="ACTOR_NOT_MEMBER",
                 message="The user cannot perform movements in this organization.",
             )
-        return error_response(
-            request,
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="INVENTORY_CONTEXT_NOT_FOUND",
-            message="The product or warehouse is unavailable in this organization.",
-        )
+        return inventory_context_not_found(request)
     if result.replayed:
         response.status_code = status.HTTP_200_OK
     return MovementResponse(
         movement_id=result.movement_id,
         balance=result.balance,
         replayed=result.replayed,
+    )
+
+
+@router.get(
+    "/stock/{product_id}/warehouses/{warehouse_id}",
+    response_model=StockBalanceResponse,
+)
+def read_stock_position(
+    product_id: UUID,
+    warehouse_id: UUID,
+    request: Request,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+    engine: Annotated[Engine, Depends(get_engine)],
+) -> StockBalanceResponse | Response:
+    try:
+        position = get_stock_position(engine, membership, product_id, warehouse_id)
+    except InventoryContextNotFoundError:
+        return inventory_context_not_found(request)
+    return StockBalanceResponse(**position.__dict__)
+
+
+@router.get("/movements", response_model=MovementHistoryResponse)
+def read_movement_history(
+    product_id: UUID,
+    warehouse_id: UUID,
+    request: Request,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+    engine: Annotated[Engine, Depends(get_engine)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: UUID | None = None,
+) -> MovementHistoryResponse | Response:
+    try:
+        page = list_stock_movements(
+            engine,
+            membership,
+            product_id,
+            warehouse_id,
+            limit,
+            cursor,
+        )
+    except InventoryContextNotFoundError:
+        return inventory_context_not_found(request)
+    except InvalidMovementCursorError:
+        return error_response(
+            request,
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_CURSOR",
+            message="The movement cursor is invalid for this inventory context.",
+        )
+    return MovementHistoryResponse(
+        items=[item.__dict__ for item in page.items],
+        next_cursor=page.next_cursor,
     )

@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import create_engine, delete, func, insert, select
 from sqlalchemy.exc import IntegrityError
 
+from app.core.authorization import CurrentMembership
 from app.modules.inventory.models import StockBalance, StockMovement
 from app.modules.inventory.service import (
     IdempotencyConflictError,
@@ -16,6 +17,7 @@ from app.modules.inventory.service import (
     RecordMovementCommand,
     record_stock_movement,
 )
+from app.modules.inventory.use_cases import get_stock_position, list_stock_movements
 from app.modules.memberships.models import Membership
 from app.modules.organizations.models import Organization
 from app.modules.products.models import Product
@@ -150,6 +152,31 @@ def test_movements_update_balance_and_history_atomically() -> None:
 
         assert balance == Decimal("6")
         assert movement_count == 4
+
+        membership = CurrentMembership(
+            organization_id=organization_id,
+            user_id=user_id,
+            role="warehouse_manager",
+        )
+        position = get_stock_position(engine, membership, product_id, warehouse_id)
+        first_page = list_stock_movements(
+            engine, membership, product_id, warehouse_id, limit=2, cursor=None
+        )
+        second_page = list_stock_movements(
+            engine,
+            membership,
+            product_id,
+            warehouse_id,
+            limit=2,
+            cursor=first_page.next_cursor,
+        )
+
+        assert position.quantity == Decimal("6")
+        assert len(first_page.items) == 2
+        assert first_page.next_cursor is not None
+        assert len(second_page.items) == 2
+        assert second_page.next_cursor is None
+        assert len({item.id for item in first_page.items + second_page.items}) == 4
     finally:
         with engine.begin() as connection:
             connection.execute(

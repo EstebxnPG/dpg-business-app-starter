@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -19,3 +20,25 @@ class MovementResponse(BaseModel):
     movement_id: UUID
     balance: Decimal
     replayed: bool
+
+
+class StockBalanceResponse(BaseModel):
+    product_id: UUID
+    warehouse_id: UUID
+    quantity: Decimal
+
+
+class MovementHistoryItemResponse(BaseModel):
+    id: UUID
+    performed_by_id: UUID
+    movement_type: MovementType
+    quantity: Decimal
+    balance_after: Decimal
+    reason: str
+    reference: str | None
+    created_at: datetime
+
+
+class MovementHistoryResponse(BaseModel):
+    items: list[MovementHistoryItemResponse]
+    next_cursor: UUID | None
