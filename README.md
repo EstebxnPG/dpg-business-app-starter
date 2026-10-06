@@ -54,6 +54,16 @@ $env:JWT_SECRET_KEY = "replace-with-at-least-32-random-characters"
 
 Open `http://127.0.0.1:8000/docs` for the interactive API documentation. `GET /health` confirms that the API process responds. `GET /ready` returns 200 only when the API can query PostgreSQL; it returns 503 otherwise. The Compose credentials are for local development only. Do not reuse them for a deployed instance.
 
+Create the first organization and administrator from a trusted terminal after applying migrations:
+
+```powershell
+.\.venv\Scripts\python -m app.cli.bootstrap_organization `
+  --name "Example Business" `
+  --admin-email "admin@example.com"
+```
+
+The command requests and confirms the password without displaying it. It creates the organization, user, and `admin` membership atomically. It is an installation bootstrap tool, not a public customer registration flow.
+
 Each schema change is recorded in `migrations/versions/` and applied with `alembic upgrade head`. Review generated migration files before applying them; autogeneration does not decide whether a schema change is correct for the business.
 
 ## Inventory movement API
