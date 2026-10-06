@@ -117,6 +117,17 @@ GET  /organizations/{organization_id}/warehouses
 
 Lists use cursor pagination, return active records by default, and accept `include_inactive=true` for administration. Product SKUs and warehouse codes are normalized to uppercase and remain unique only within their organization.
 
+## Organization invitations
+
+An organization administrator can invite an employee with:
+
+```text
+POST /organizations/{organization_id}/invitations
+POST /invitations/accept
+```
+
+Invitations expire after 24 hours and can be accepted only once. During the MVP, the creation response returns the secret acceptance token directly; production delivery will move to an Outbox-backed email adapter. New users provide a password when accepting. Existing users must authenticate as the invited account and reuse their existing password and identity.
+
 Run the initial checks with:
 
 ```powershell

@@ -76,12 +76,12 @@ def create_access_token(user: CurrentUser) -> tuple[str, int]:
     return token, TOKEN_EXPIRE_MINUTES * 60
 
 
-def get_current_user(
+def get_optional_current_user(
     token: str | None = Depends(oauth2_scheme),
     engine: Engine = Depends(get_engine),
-) -> CurrentUser:
+) -> CurrentUser | None:
     if token is None:
-        raise InvalidCredentialsError
+        return None
 
     try:
         payload = jwt.decode(
@@ -105,3 +105,11 @@ def get_current_user(
     if user is None:
         raise InvalidCredentialsError
     return CurrentUser(id=user.id, email=user.email)
+
+
+def get_current_user(
+    current_user: CurrentUser | None = Depends(get_optional_current_user),
+) -> CurrentUser:
+    if current_user is None:
+        raise InvalidCredentialsError
+    return current_user

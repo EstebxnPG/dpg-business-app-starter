@@ -17,6 +17,7 @@ This directory records decisions that affect the product or its architecture. Ea
 | 0009 | [Separate current stock from paginated movement history](0009-separate-current-stock-from-paginated-movement-history.md) | Accepted |
 | 0010 | [Manage inventory catalogs with organization-scoped keys](0010-manage-inventory-catalogs-with-organization-scoped-keys.md) | Accepted |
 | 0011 | [Bootstrap the first organization through a local command](0011-bootstrap-first-organization-through-a-local-command.md) | Accepted |
+| 0012 | [Invite users with expiring single-use tokens](0012-invite-users-with-expiring-single-use-tokens.md) | Accepted |
 
 ## Recording a decision
 
