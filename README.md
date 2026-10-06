@@ -79,7 +79,33 @@ It requires an `Idempotency-Key` header and an access token in `Authorization: B
 
 A new movement returns 201. A safe replay returns the original result with 200. Business and validation errors use a stable envelope containing `code`, `message`, `details`, and `request_id`.
 
+Current stock for one product and warehouse is available at:
+
+```text
+GET /organizations/{organization_id}/inventory/stock/{product_id}/warehouses/{warehouse_id}
+```
+
+Movement history is available in reverse chronological cursor pages at:
+
+```text
+GET /organizations/{organization_id}/inventory/movements?product_id={product_id}&warehouse_id={warehouse_id}&limit=50&cursor={movement_id}
+```
+
 Organization access is resolved from the authenticated user's membership. Inventory receipts and issues are available to `admin` and `warehouse_manager`; `salesperson` can read inventory but cannot create movements directly. Missing organization access returns 404 to avoid exposing private organization identifiers, while a known member without the required permission receives 403.
+
+## Catalog API
+
+Products and warehouses can be created by organization administrators and listed by members with inventory read access:
+
+```text
+POST /organizations/{organization_id}/products
+GET  /organizations/{organization_id}/products
+
+POST /organizations/{organization_id}/warehouses
+GET  /organizations/{organization_id}/warehouses
+```
+
+Lists use cursor pagination, return active records by default, and accept `include_inactive=true` for administration. Product SKUs and warehouse codes are normalized to uppercase and remain unique only within their organization.
 
 Run the initial checks with:
 

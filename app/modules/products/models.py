@@ -5,6 +5,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     String,
     UniqueConstraint,
     Uuid,
@@ -21,6 +22,13 @@ class Product(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "sku", name="uq_products_organization_sku"),
         UniqueConstraint("organization_id", "id", name="uq_products_organization_id"),
+        Index(
+            "ix_products_organization_active_created",
+            "organization_id",
+            "active",
+            "created_at",
+            "id",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(

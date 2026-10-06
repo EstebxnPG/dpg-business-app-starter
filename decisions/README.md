@@ -14,6 +14,8 @@ This directory records decisions that affect the product or its architecture. Ea
 | 0006 | [Authenticate API users with signed access tokens](0006-authenticate-api-users-with-signed-tokens.md) | Accepted |
 | 0007 | [Authorize organization actions with fixed role policies](0007-authorize-organization-actions-with-fixed-role-policies.md) | Accepted |
 | 0008 | [Coordinate business actions in application use cases](0008-coordinate-business-actions-in-application-use-cases.md) | Accepted |
+| 0009 | [Separate current stock from paginated movement history](0009-separate-current-stock-from-paginated-movement-history.md) | Accepted |
+| 0010 | [Manage inventory catalogs with organization-scoped keys](0010-manage-inventory-catalogs-with-organization-scoped-keys.md) | Accepted |
 
 ## Recording a decision
 
