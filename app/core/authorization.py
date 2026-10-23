@@ -17,6 +17,7 @@ class Permission(StrEnum):
     INVENTORY_READ = "inventory:read"
     INVENTORY_RECEIVE = "inventory:receive"
     INVENTORY_ISSUE = "inventory:issue"
+    INVENTORY_TRANSFER = "inventory:transfer"
     INVENTORY_ADJUST = "inventory:adjust"
     CATALOG_MANAGE = "catalog:manage"
     MEMBERS_MANAGE = "members:manage"
@@ -30,6 +31,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             Permission.INVENTORY_READ,
             Permission.INVENTORY_RECEIVE,
             Permission.INVENTORY_ISSUE,
+            Permission.INVENTORY_TRANSFER,
         }
     ),
     "salesperson": frozenset(

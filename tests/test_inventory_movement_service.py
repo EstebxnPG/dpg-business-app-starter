@@ -9,14 +9,16 @@ from sqlalchemy import create_engine, delete, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.authorization import CurrentMembership
-from app.modules.inventory.models import StockBalance, StockMovement
+from app.modules.inventory.models import StockBalance, StockMovement, StockTransfer
 from app.modules.inventory.service import (
     IdempotencyConflictError,
     InactiveInventoryContextError,
     InsufficientStockError,
     MovementType,
     RecordMovementCommand,
+    TransferStockCommand,
     record_stock_movement,
+    transfer_stock,
 )
 from app.modules.inventory.use_cases import get_stock_position, list_stock_movements
 from app.modules.memberships.models import Membership
@@ -35,6 +37,7 @@ def test_movements_update_balance_and_history_atomically() -> None:
     organization_id = uuid4()
     product_id = uuid4()
     warehouse_id = uuid4()
+    destination_warehouse_id = uuid4()
     user_id = uuid4()
 
     with engine.begin() as connection:
@@ -69,6 +72,14 @@ def test_movements_update_balance_and_history_atomically() -> None:
                 organization_id=organization_id,
                 code="TEST-WAREHOUSE",
                 name="Test Warehouse",
+            )
+        )
+        connection.execute(
+            insert(Warehouse).values(
+                id=destination_warehouse_id,
+                organization_id=organization_id,
+                code="DESTINATION-WAREHOUSE",
+                name="Destination Warehouse",
             )
         )
 
@@ -128,6 +139,61 @@ def test_movements_update_balance_and_history_atomically() -> None:
         assert sum(not result.replayed for result in concurrent_results) == 1
         assert {result.balance for result in concurrent_results} == {Decimal("6")}
 
+        transfer_command = TransferStockCommand(
+            organization_id=organization_id,
+            product_id=product_id,
+            source_warehouse_id=warehouse_id,
+            destination_warehouse_id=destination_warehouse_id,
+            performed_by_id=user_id,
+            quantity=Decimal("3"),
+            reason="Store replenishment",
+            idempotency_key="transfer-once",
+        )
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            transfer_results = list(
+                executor.map(
+                    lambda _: transfer_stock(engine, transfer_command), range(8)
+                )
+            )
+        transfer = next(result for result in transfer_results if not result.replayed)
+        transfer_replay = transfer_stock(engine, transfer_command)
+
+        assert transfer.source_balance == Decimal("3")
+        assert transfer.destination_balance == Decimal("3")
+        assert transfer_replay == replace(transfer, replayed=True)
+        assert {result.transfer_id for result in transfer_results} == {
+            transfer.transfer_id
+        }
+        assert sum(not result.replayed for result in transfer_results) == 1
+
+        with pytest.raises(IdempotencyConflictError):
+            transfer_stock(engine, replace(transfer_command, quantity=Decimal("2")))
+
+        with pytest.raises(InsufficientStockError):
+            transfer_stock(
+                engine,
+                replace(
+                    transfer_command,
+                    quantity=Decimal("10"),
+                    idempotency_key="transfer-too-much",
+                ),
+            )
+
+        with engine.connect() as connection:
+            linked_movements = connection.scalar(
+                select(func.count())
+                .select_from(StockMovement)
+                .where(StockMovement.transfer_id == transfer.transfer_id)
+            )
+            transfer_count = connection.scalar(
+                select(func.count())
+                .select_from(StockTransfer)
+                .where(StockTransfer.organization_id == organization_id)
+            )
+
+        assert linked_movements == 2
+        assert transfer_count == 1
+
         with pytest.raises(InsufficientStockError):
             record_stock_movement(engine, command(MovementType.ISSUE, "8"))
 
@@ -162,8 +228,8 @@ def test_movements_update_balance_and_history_atomically() -> None:
                 .where(StockMovement.organization_id == organization_id)
             )
 
-        assert balance == Decimal("6")
-        assert movement_count == 4
+        assert balance == Decimal("3")
+        assert movement_count == 6
 
         membership = CurrentMembership(
             organization_id=organization_id,
@@ -172,28 +238,33 @@ def test_movements_update_balance_and_history_atomically() -> None:
         )
         position = get_stock_position(engine, membership, product_id, warehouse_id)
         first_page = list_stock_movements(
-            engine, membership, product_id, warehouse_id, limit=2, cursor=None
+            engine, membership, product_id, warehouse_id, limit=3, cursor=None
         )
         second_page = list_stock_movements(
             engine,
             membership,
             product_id,
             warehouse_id,
-            limit=2,
+            limit=3,
             cursor=first_page.next_cursor,
         )
 
-        assert position.quantity == Decimal("6")
-        assert len(first_page.items) == 2
+        assert position.quantity == Decimal("3")
+        assert len(first_page.items) == 3
         assert first_page.next_cursor is not None
         assert len(second_page.items) == 2
         assert second_page.next_cursor is None
-        assert len({item.id for item in first_page.items + second_page.items}) == 4
+        assert len({item.id for item in first_page.items + second_page.items}) == 5
     finally:
         with engine.begin() as connection:
             connection.execute(
                 delete(StockMovement).where(
                     StockMovement.organization_id == organization_id
+                )
+            )
+            connection.execute(
+                delete(StockTransfer).where(
+                    StockTransfer.organization_id == organization_id
                 )
             )
             connection.execute(

@@ -1,5 +1,5 @@
 from app.core.models import Base
-from app.modules.inventory.models import StockBalance, StockMovement
+from app.modules.inventory.models import StockBalance, StockMovement, StockTransfer
 from app.modules.invitations.models import OrganizationInvitation
 from app.modules.memberships.models import Membership
 from app.modules.organizations.models import Organization
@@ -15,6 +15,7 @@ __all__ = [
     "Product",
     "StockBalance",
     "StockMovement",
+    "StockTransfer",
     "User",
     "Warehouse",
 ]

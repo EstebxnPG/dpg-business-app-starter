@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.modules.inventory.service import MovementType
 
@@ -19,6 +19,28 @@ class RecordMovementRequest(BaseModel):
 class MovementResponse(BaseModel):
     movement_id: UUID
     balance: Decimal
+    replayed: bool
+
+
+class TransferStockRequest(BaseModel):
+    product_id: UUID
+    source_warehouse_id: UUID
+    destination_warehouse_id: UUID
+    quantity: Decimal = Field(gt=0, max_digits=20, decimal_places=6)
+    reason: str = Field(min_length=1, max_length=240)
+    reference: str | None = Field(default=None, max_length=120)
+
+    @model_validator(mode="after")
+    def warehouses_must_differ(self):
+        if self.source_warehouse_id == self.destination_warehouse_id:
+            raise ValueError("Source and destination warehouses must differ")
+        return self
+
+
+class StockTransferResponse(BaseModel):
+    transfer_id: UUID
+    source_balance: Decimal
+    destination_balance: Decimal
     replayed: bool
 
 

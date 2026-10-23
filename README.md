@@ -22,7 +22,7 @@ Initial inventory rules:
 
 ## Scope
 
-The first reference application covers organizations, access control, products, warehouses, inventory movements, balances, and the audit trail needed for that workflow. CSV imports, transfers, and more detailed permissions can follow once the first workflow works end to end.
+The first reference application covers organizations, access control, products, warehouses, inventory movements, balances, transfers, and the audit trail needed for those workflows. CSV imports and more detailed permissions can follow once these workflows work end to end.
 
 This starter does not initially process sales, payments, or electronic invoices. Existing POS and spreadsheet data may become inputs to DPG Data Platform. Sales rankings and revenue comparisons require sales data; inventory movements alone cannot answer those questions.
 
@@ -102,6 +102,14 @@ GET /organizations/{organization_id}/inventory/movements?product_id={product_id}
 ```
 
 Organization access is resolved from the authenticated user's membership. Inventory receipts and issues are available to `admin` and `warehouse_manager`; `salesperson` can read inventory but cannot create movements directly. Missing organization access returns 404 to avoid exposing private organization identifiers, while a known member without the required permission receives 403.
+
+Stock can be transferred atomically between two warehouses with:
+
+```text
+POST /organizations/{organization_id}/inventory/transfers
+```
+
+The request requires the product, source warehouse, destination warehouse, quantity, reason, and an `Idempotency-Key`. One database transaction debits the source, credits the destination, records the transfer, and creates two linked inventory movements. A failure rolls back every effect.
 
 ## Catalog API
 

@@ -17,7 +17,10 @@ from app.modules.inventory.service import (
     MovementResult,
     MovementType,
     RecordMovementCommand,
+    TransferResult,
+    TransferStockCommand,
     record_stock_movement,
+    transfer_stock,
 )
 from app.modules.products.models import Product
 from app.modules.warehouses.models import Warehouse
@@ -34,6 +37,18 @@ class RecordManualMovementCommand:
     product_id: UUID
     warehouse_id: UUID
     movement_type: MovementType
+    quantity: Decimal
+    reason: str
+    idempotency_key: str
+    reference: str | None = None
+
+
+@dataclass(frozen=True)
+class TransferInventoryCommand:
+    organization_id: UUID
+    product_id: UUID
+    source_warehouse_id: UUID
+    destination_warehouse_id: UUID
     quantity: Decimal
     reason: str
     idempotency_key: str
@@ -113,6 +128,31 @@ def record_manual_stock_movement(
             warehouse_id=command.warehouse_id,
             performed_by_id=membership.user_id,
             movement_type=command.movement_type,
+            quantity=command.quantity,
+            reason=command.reason,
+            reference=command.reference,
+            idempotency_key=command.idempotency_key,
+        ),
+    )
+
+
+def transfer_inventory(
+    engine: Engine,
+    membership: CurrentMembership,
+    command: TransferInventoryCommand,
+) -> TransferResult:
+    if membership.organization_id != command.organization_id:
+        raise OrganizationNotFoundError
+
+    require_permission(membership, Permission.INVENTORY_TRANSFER)
+    return transfer_stock(
+        engine,
+        TransferStockCommand(
+            organization_id=command.organization_id,
+            product_id=command.product_id,
+            source_warehouse_id=command.source_warehouse_id,
+            destination_warehouse_id=command.destination_warehouse_id,
+            performed_by_id=membership.user_id,
             quantity=command.quantity,
             reason=command.reason,
             reference=command.reference,

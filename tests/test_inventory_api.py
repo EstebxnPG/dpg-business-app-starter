@@ -17,6 +17,7 @@ from app.modules.inventory.service import (
     IdempotencyConflictError,
     InsufficientStockError,
     MovementResult,
+    TransferResult,
 )
 from app.modules.inventory.use_cases import (
     MovementHistoryItem,
@@ -54,6 +55,16 @@ def movement_headers():
     return {
         "Idempotency-Key": str(uuid4()),
         "X-Request-ID": "test-request-id",
+    }
+
+
+def transfer_request():
+    return {
+        "product_id": str(uuid4()),
+        "source_warehouse_id": str(uuid4()),
+        "destination_warehouse_id": str(uuid4()),
+        "quantity": "3",
+        "reason": "Store replenishment",
     }
 
 
@@ -251,3 +262,93 @@ def test_history_limit_is_validated_before_query(client) -> None:
     assert response.status_code == 422
     assert response.json()["code"] == "VALIDATION_ERROR"
     assert response.json()["request_id"] == "invalid-history-limit"
+
+
+def test_create_transfer_returns_both_balances(client, monkeypatch) -> None:
+    transfer_id = uuid4()
+    monkeypatch.setattr(
+        inventory_router,
+        "transfer_inventory",
+        lambda engine, membership, command: TransferResult(
+            transfer_id=transfer_id,
+            source_balance=Decimal("7"),
+            destination_balance=Decimal("3"),
+            replayed=False,
+        ),
+    )
+
+    response = client.post(
+        f"/organizations/{uuid4()}/inventory/transfers",
+        json=transfer_request(),
+        headers=movement_headers(),
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "transfer_id": str(transfer_id),
+        "source_balance": "7",
+        "destination_balance": "3",
+        "replayed": False,
+    }
+
+
+def test_replayed_transfer_returns_ok(client, monkeypatch) -> None:
+    monkeypatch.setattr(
+        inventory_router,
+        "transfer_inventory",
+        lambda engine, membership, command: TransferResult(
+            transfer_id=uuid4(),
+            source_balance=Decimal("7"),
+            destination_balance=Decimal("3"),
+            replayed=True,
+        ),
+    )
+
+    response = client.post(
+        f"/organizations/{uuid4()}/inventory/transfers",
+        json=transfer_request(),
+        headers=movement_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["replayed"] is True
+
+
+def test_transfer_rejects_same_warehouse_before_use_case(client) -> None:
+    warehouse_id = uuid4()
+    response = client.post(
+        f"/organizations/{uuid4()}/inventory/transfers",
+        json={
+            **transfer_request(),
+            "source_warehouse_id": str(warehouse_id),
+            "destination_warehouse_id": str(warehouse_id),
+        },
+        headers=movement_headers(),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.parametrize(
+    ("exception", "expected_code"),
+    [
+        (InsufficientStockError(), "INSUFFICIENT_STOCK"),
+        (IdempotencyConflictError(), "IDEMPOTENCY_KEY_REUSED"),
+    ],
+)
+def test_transfer_business_errors_have_stable_contract(
+    client, monkeypatch, exception, expected_code
+) -> None:
+    def raise_error(engine, membership, command):
+        raise exception
+
+    monkeypatch.setattr(inventory_router, "transfer_inventory", raise_error)
+    response = client.post(
+        f"/organizations/{uuid4()}/inventory/transfers",
+        json=transfer_request(),
+        headers=movement_headers(),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == expected_code
