@@ -192,7 +192,14 @@ def create_sale(engine: Engine, command: CreateSaleCommand) -> SaleResult:
             )
             product_ids = sorted((line.product_id for line in command.lines), key=str)
             products = connection.execute(
-                select(Product.id, Product.cost, Product.sale_price, Product.active)
+                select(
+                    Product.id,
+                    Product.sku,
+                    Product.name,
+                    Product.cost,
+                    Product.sale_price,
+                    Product.active,
+                )
                 .where(
                     Product.organization_id == command.organization_id,
                     Product.id.in_(product_ids),
@@ -388,6 +395,8 @@ def create_sale(engine: Engine, command: CreateSaleCommand) -> SaleResult:
                             product_id=line.product_id,
                             organization_id=command.organization_id,
                             quantity=line.quantity,
+                            product_sku=product.sku,
+                            product_name=product.name,
                             list_unit_price=product.sale_price,
                             unit_price=unit_price,
                             unit_cost=product.cost,

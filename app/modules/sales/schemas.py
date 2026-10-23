@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -65,3 +66,48 @@ class SetApprovalPinRequest(BaseModel):
 
 class ApprovalPinResponse(BaseModel):
     configured: bool
+
+
+class SaleSummaryResponse(BaseModel):
+    id: UUID
+    warehouse_id: UUID
+    sold_by_id: UUID
+    approved_by_id: UUID | None
+    subtotal: Decimal
+    discount_total: Decimal
+    total: Decimal
+    cost_total: Decimal
+    created_at: datetime
+
+
+class SaleListResponse(BaseModel):
+    items: list[SaleSummaryResponse]
+    next_cursor: UUID | None
+
+
+class ReceiptLineResponse(BaseModel):
+    product_id: UUID
+    sku: str
+    name: str
+    quantity: Decimal
+    list_unit_price: Decimal
+    unit_price: Decimal
+    unit_cost: Decimal
+    line_total: Decimal
+
+
+class SaleReceiptResponse(BaseModel):
+    sale_id: UUID
+    organization_name: str
+    warehouse_id: UUID
+    warehouse_code: str
+    warehouse_name: str
+    sold_by_id: UUID
+    approved_by_id: UUID | None
+    approval_reason: str | None
+    subtotal: Decimal
+    discount_total: Decimal
+    total: Decimal
+    cost_total: Decimal
+    created_at: datetime
+    lines: list[ReceiptLineResponse]

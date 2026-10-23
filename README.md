@@ -141,6 +141,15 @@ The request contains one or more unique product lines and requires an `Idempoten
 
 Administrators configure the salesperson discount threshold through `PATCH /organizations/{organization_id}/sales/policy` and their personal six-digit approval PIN through `PUT /organizations/{organization_id}/sales/approval-pin`. Routine discounts require a reason. Discounts beyond the configured threshold require an administrator's user ID and PIN; five failed attempts lock that PIN for 15 minutes. Selling below recorded cost is not permitted in this MVP.
 
+Confirmed sales and receipt-ready details are available at:
+
+```text
+GET /organizations/{organization_id}/sales
+GET /organizations/{organization_id}/sales/receipts/{sale_id}
+```
+
+Receipt lines preserve the SKU and product name that existed when the sale was confirmed. The JSON receipt is the canonical source for future browser, PDF, messaging, or ESC/POS printer adapters. Electronic invoicing remains a separate integration and must not be inferred from a commercial receipt.
+
 ## Organization invitations
 
 An organization administrator can invite an employee with:

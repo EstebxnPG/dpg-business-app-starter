@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -14,6 +15,7 @@ from app.modules.sales.service import (
     SalePriceBelowCostError,
     SaleResult,
 )
+from app.modules.sales.use_cases import ReceiptLine, SalePage, SaleReceipt, SaleSummary
 
 
 @pytest.fixture
@@ -158,3 +160,62 @@ def test_admin_can_configure_policy_and_personal_pin(client, monkeypatch) -> Non
     assert policy.json()["salesperson_max_discount_rate"] == "0.075"
     assert pin.status_code == 200
     assert captured["pin"] == "123456"
+
+
+def test_list_sales_and_read_receipt(client, monkeypatch) -> None:
+    sale_id = uuid4()
+    warehouse_id = uuid4()
+    seller_id = uuid4()
+    product_id = uuid4()
+    created_at = datetime(2026, 10, 23, tzinfo=UTC)
+    summary = SaleSummary(
+        sale_id,
+        warehouse_id,
+        seller_id,
+        None,
+        Decimal("20000"),
+        Decimal("2000"),
+        Decimal("18000"),
+        Decimal("12000"),
+        created_at,
+    )
+    receipt = SaleReceipt(
+        sale_id=sale_id,
+        organization_name="Beauty Store",
+        warehouse_id=warehouse_id,
+        warehouse_code="MAIN",
+        warehouse_name="Main Store",
+        sold_by_id=seller_id,
+        approved_by_id=None,
+        approval_reason="Customer negotiation",
+        subtotal=Decimal("20000"),
+        discount_total=Decimal("2000"),
+        total=Decimal("18000"),
+        cost_total=Decimal("12000"),
+        created_at=created_at,
+        lines=[
+            ReceiptLine(
+                product_id,
+                "BEAUTY-001",
+                "Shampoo",
+                Decimal("1"),
+                Decimal("20000"),
+                Decimal("18000"),
+                Decimal("12000"),
+                Decimal("18000"),
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        sales_router, "list_sales", lambda *args: SalePage([summary], None)
+    )
+    monkeypatch.setattr(sales_router, "get_sale_receipt", lambda *args: receipt)
+
+    listed = client.get(f"/organizations/{uuid4()}/sales")
+    detailed = client.get(f"/organizations/{uuid4()}/sales/receipts/{sale_id}")
+
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["id"] == str(sale_id)
+    assert detailed.status_code == 200
+    assert detailed.json()["lines"][0]["name"] == "Shampoo"
+    assert detailed.json()["total"] == "18000"

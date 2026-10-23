@@ -94,6 +94,8 @@ class SaleLine(Base):
     product_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     organization_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
+    product_sku: Mapped[str] = mapped_column(String(64), nullable=False)
+    product_name: Mapped[str] = mapped_column(String(160), nullable=False)
     list_unit_price: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     unit_cost: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)

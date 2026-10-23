@@ -4,8 +4,9 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, func, insert, select
+from sqlalchemy import create_engine, delete, func, insert, select, update
 
+from app.core.authorization import CurrentMembership
 from app.core.security import hash_password
 from app.modules.inventory.models import StockBalance, StockMovement
 from app.modules.memberships.models import Membership
@@ -22,6 +23,7 @@ from app.modules.sales.service import (
     SalePriceBelowCostError,
     create_sale,
 )
+from app.modules.sales.use_cases import get_sale_receipt, list_sales
 from app.modules.users.models import User
 from app.modules.warehouses.models import Warehouse
 
@@ -205,6 +207,8 @@ def test_sales_preserve_prices_authorize_discounts_and_move_stock() -> None:
         with engine.connect() as connection:
             line = connection.execute(
                 select(
+                    SaleLine.product_sku,
+                    SaleLine.product_name,
                     SaleLine.list_unit_price,
                     SaleLine.unit_price,
                     SaleLine.unit_cost,
@@ -218,7 +222,24 @@ def test_sales_preserve_prices_authorize_discounts_and_move_stock() -> None:
         assert line.list_unit_price == Decimal("20000")
         assert line.unit_price == Decimal("18000")
         assert line.unit_cost == Decimal("12000")
+        assert line.product_sku == "SALE-1"
+        assert line.product_name == "Shampoo"
         assert movement_count == 1
+
+        with engine.begin() as connection:
+            connection.execute(
+                update(Product)
+                .where(Product.id == product_id)
+                .values(name="Renamed Shampoo", sale_price=Decimal("22000"))
+            )
+        membership = CurrentMembership(organization_id, seller_id, "salesperson")
+        receipt = get_sale_receipt(engine, membership, discounted.sale_id)
+        sales_page = list_sales(engine, membership, limit=2, cursor=None)
+
+        assert receipt.lines[0].name == "Shampoo"
+        assert receipt.lines[0].list_unit_price == Decimal("20000")
+        assert len(sales_page.items) == 2
+        assert sales_page.next_cursor is not None
     finally:
         with engine.begin() as connection:
             connection.execute(

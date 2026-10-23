@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Request, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
 from sqlalchemy import Engine
 
 from app.core.authorization import CurrentMembership, get_current_membership
@@ -10,6 +10,8 @@ from app.database import get_engine
 from app.modules.sales.schemas import (
     ApprovalPinResponse,
     CreateSaleRequest,
+    SaleListResponse,
+    SaleReceiptResponse,
     SaleResponse,
     SalesPolicyResponse,
     SetApprovalPinRequest,
@@ -28,10 +30,14 @@ from app.modules.sales.service import (
     SalePriceBelowCostError,
 )
 from app.modules.sales.use_cases import (
+    InvalidSaleCursorError,
+    SaleNotFoundError,
     SubmitSaleApproval,
     SubmitSaleCommand,
     SubmitSaleLine,
+    get_sale_receipt,
     get_sales_policy,
+    list_sales,
     set_approval_pin,
     submit_sale,
     update_sales_policy,
@@ -142,6 +148,50 @@ def create_sale_endpoint(
     if result.replayed:
         response.status_code = status.HTTP_200_OK
     return SaleResponse(**result.__dict__)
+
+
+@router.get("", response_model=SaleListResponse)
+def list_sales_endpoint(
+    request: Request,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+    engine: Annotated[Engine, Depends(get_engine)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: UUID | None = None,
+) -> SaleListResponse | Response:
+    try:
+        page = list_sales(engine, membership, limit, cursor)
+    except InvalidSaleCursorError:
+        return error_response(
+            request,
+            status_code=400,
+            code="INVALID_CURSOR",
+            message="The sale cursor is invalid for this organization.",
+        )
+    return SaleListResponse(
+        items=[item.__dict__ for item in page.items], next_cursor=page.next_cursor
+    )
+
+
+@router.get("/receipts/{sale_id}", response_model=SaleReceiptResponse)
+def read_sale_receipt(
+    sale_id: UUID,
+    request: Request,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+    engine: Annotated[Engine, Depends(get_engine)],
+) -> SaleReceiptResponse | Response:
+    try:
+        receipt = get_sale_receipt(engine, membership, sale_id)
+    except SaleNotFoundError:
+        return error_response(
+            request,
+            status_code=404,
+            code="SALE_NOT_FOUND",
+            message="The sale is unavailable in this organization.",
+        )
+    return SaleReceiptResponse(
+        **{key: value for key, value in receipt.__dict__.items() if key != "lines"},
+        lines=[line.__dict__ for line in receipt.lines],
+    )
 
 
 @router.get("/policy", response_model=SalesPolicyResponse)

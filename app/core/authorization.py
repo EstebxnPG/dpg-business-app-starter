@@ -22,6 +22,7 @@ class Permission(StrEnum):
     CATALOG_MANAGE = "catalog:manage"
     MEMBERS_MANAGE = "members:manage"
     SALES_CREATE = "sales:create"
+    SALES_READ = "sales:read"
 
 
 ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
@@ -38,6 +39,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
         {
             Permission.INVENTORY_READ,
             Permission.SALES_CREATE,
+            Permission.SALES_READ,
         }
     ),
 }
