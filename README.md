@@ -117,6 +117,8 @@ GET  /organizations/{organization_id}/warehouses
 
 Lists use cursor pagination, return active records by default, and accept `include_inactive=true` for administration. Product SKUs and warehouse codes are normalized to uppercase and remain unique only within their organization.
 
+Catalog lists also accept `search` for SKU/code or name. Individual products and warehouses support `GET` and `PATCH` by ID. Names and active state can change, while SKU and warehouse code remain immutable. There are no delete endpoints: historical records stay addressable, and an entity can be deactivated only after its total stock reaches zero.
+
 ## Organization invitations
 
 An organization administrator can invite an employee with:

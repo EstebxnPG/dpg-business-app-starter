@@ -10,6 +10,8 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.exc import IntegrityError
 
 from app.modules.inventory.models import StockBalance, StockMovement
+from app.modules.products.models import Product
+from app.modules.warehouses.models import Warehouse
 
 
 class MovementType(StrEnum):
@@ -26,6 +28,14 @@ class InsufficientStockError(ValueError):
 
 
 class IdempotencyConflictError(ValueError):
+    pass
+
+
+class InventoryContextNotFoundError(ValueError):
+    pass
+
+
+class InactiveInventoryContextError(ValueError):
     pass
 
 
@@ -103,6 +113,27 @@ def record_stock_movement(
             replayed = _replayed_result(connection, command, fingerprint)
             if replayed is not None:
                 return replayed
+
+            product_active = connection.scalar(
+                select(Product.active)
+                .where(
+                    Product.organization_id == command.organization_id,
+                    Product.id == command.product_id,
+                )
+                .with_for_update(read=True)
+            )
+            warehouse_active = connection.scalar(
+                select(Warehouse.active)
+                .where(
+                    Warehouse.organization_id == command.organization_id,
+                    Warehouse.id == command.warehouse_id,
+                )
+                .with_for_update(read=True)
+            )
+            if product_active is None or warehouse_active is None:
+                raise InventoryContextNotFoundError
+            if not product_active or not warehouse_active:
+                raise InactiveInventoryContextError
 
             if command.movement_type is MovementType.RECEIPT:
                 balance = connection.scalar(

@@ -31,6 +31,7 @@ def client():
 def test_create_product_normalizes_catalog_values(client, monkeypatch) -> None:
     product_id = uuid4()
     captured = {}
+    timestamp = datetime(2026, 10, 5, tzinfo=UTC)
 
     def create(engine, membership, sku, name):
         captured.update(sku=sku, name=name)
@@ -39,7 +40,8 @@ def test_create_product_normalizes_catalog_values(client, monkeypatch) -> None:
             sku=sku,
             name=name,
             active=True,
-            created_at=datetime(2026, 10, 5, tzinfo=UTC),
+            created_at=timestamp,
+            updated_at=timestamp,
         )
 
     monkeypatch.setattr(products_router, "create_product", create)
@@ -56,6 +58,7 @@ def test_create_product_normalizes_catalog_values(client, monkeypatch) -> None:
 def test_list_products_returns_cursor_page(client, monkeypatch) -> None:
     product_id = uuid4()
     next_cursor = uuid4()
+    timestamp = datetime(2026, 10, 5, tzinfo=UTC)
     monkeypatch.setattr(
         products_router,
         "list_products",
@@ -66,7 +69,8 @@ def test_list_products_returns_cursor_page(client, monkeypatch) -> None:
                     sku="BEAUTY-001",
                     name="Shampoo Repair",
                     active=True,
-                    created_at=datetime(2026, 10, 5, tzinfo=UTC),
+                    created_at=timestamp,
+                    updated_at=timestamp,
                 )
             ],
             next_cursor=next_cursor,
@@ -82,12 +86,14 @@ def test_list_products_returns_cursor_page(client, monkeypatch) -> None:
 
 def test_create_and_list_warehouse_contracts(client, monkeypatch) -> None:
     warehouse_id = uuid4()
+    timestamp = datetime(2026, 10, 5, tzinfo=UTC)
     item = WarehouseItem(
         id=warehouse_id,
         code="MAIN",
         name="Main Warehouse",
         active=True,
-        created_at=datetime(2026, 10, 5, tzinfo=UTC),
+        created_at=timestamp,
+        updated_at=timestamp,
     )
     monkeypatch.setattr(warehouses_router, "create_warehouse", lambda *args: item)
     monkeypatch.setattr(
@@ -106,3 +112,40 @@ def test_create_and_list_warehouse_contracts(client, monkeypatch) -> None:
     assert created.json()["code"] == "MAIN"
     assert listed.status_code == 200
     assert listed.json()["items"][0]["id"] == str(warehouse_id)
+
+
+def test_product_detail_and_update_contracts(client, monkeypatch) -> None:
+    product_id = uuid4()
+    timestamp = datetime(2026, 10, 5, tzinfo=UTC)
+    product = ProductItem(
+        id=product_id,
+        sku="BEAUTY-001",
+        name="Updated Shampoo",
+        active=True,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    monkeypatch.setattr(products_router, "get_product", lambda *args: product)
+    monkeypatch.setattr(products_router, "update_product", lambda *args: product)
+
+    detail = client.get(f"/organizations/{uuid4()}/products/{product_id}")
+    updated = client.patch(
+        f"/organizations/{uuid4()}/products/{product_id}",
+        json={"name": " Updated Shampoo "},
+    )
+
+    assert detail.status_code == 200
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "Updated Shampoo"
+
+
+def test_empty_catalog_update_is_rejected(client) -> None:
+    response = client.patch(
+        f"/organizations/{uuid4()}/products/{uuid4()}",
+        json={},
+        headers={"X-Request-ID": "empty-product-update"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "VALIDATION_ERROR"
+    assert response.json()["request_id"] == "empty-product-update"

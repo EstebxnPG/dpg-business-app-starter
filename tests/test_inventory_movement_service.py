@@ -5,13 +5,14 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, func, insert, select
+from sqlalchemy import create_engine, delete, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.authorization import CurrentMembership
 from app.modules.inventory.models import StockBalance, StockMovement
 from app.modules.inventory.service import (
     IdempotencyConflictError,
+    InactiveInventoryContextError,
     InsufficientStockError,
     MovementType,
     RecordMovementCommand,
@@ -135,6 +136,17 @@ def test_movements_update_balance_and_history_atomically() -> None:
         )
         with pytest.raises(IntegrityError):
             record_stock_movement(engine, invalid_actor)
+
+        with engine.begin() as connection:
+            connection.execute(
+                update(Product).where(Product.id == product_id).values(active=False)
+            )
+        with pytest.raises(InactiveInventoryContextError):
+            record_stock_movement(engine, command(MovementType.RECEIPT, "1"))
+        with engine.begin() as connection:
+            connection.execute(
+                update(Product).where(Product.id == product_id).values(active=True)
+            )
 
         with engine.connect() as connection:
             balance = connection.scalar(

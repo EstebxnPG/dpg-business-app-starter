@@ -16,6 +16,7 @@ from app.modules.inventory.schemas import (
 )
 from app.modules.inventory.service import (
     IdempotencyConflictError,
+    InactiveInventoryContextError,
     InsufficientStockError,
 )
 from app.modules.inventory.use_cases import (
@@ -74,6 +75,15 @@ def create_movement(
 
     try:
         result = record_manual_stock_movement(engine, membership, command)
+    except InventoryContextNotFoundError:
+        return inventory_context_not_found(request)
+    except InactiveInventoryContextError:
+        return error_response(
+            request,
+            status_code=status.HTTP_409_CONFLICT,
+            code="INVENTORY_CONTEXT_INACTIVE",
+            message="The product and warehouse must be active for new movements.",
+        )
     except InsufficientStockError:
         return error_response(
             request,

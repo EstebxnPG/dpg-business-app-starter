@@ -13,6 +13,7 @@ from app.core.authorization import (
 )
 from app.modules.inventory.models import StockBalance, StockMovement
 from app.modules.inventory.service import (
+    InventoryContextNotFoundError,
     MovementResult,
     MovementType,
     RecordMovementCommand,
@@ -37,10 +38,6 @@ class RecordManualMovementCommand:
     reason: str
     idempotency_key: str
     reference: str | None = None
-
-
-class InventoryContextNotFoundError(Exception):
-    pass
 
 
 class InvalidMovementCursorError(Exception):

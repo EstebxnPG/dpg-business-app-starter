@@ -5,20 +5,27 @@ import pytest
 from sqlalchemy import create_engine, delete, insert
 
 from app.core.authorization import CurrentMembership, PermissionDeniedError
+from app.modules.inventory.models import StockBalance
 from app.modules.memberships.models import Membership
 from app.modules.organizations.models import Organization
 from app.modules.products.models import Product
 from app.modules.products.use_cases import (
+    ProductHasStockError,
     ProductSkuConflictError,
     create_product,
+    get_product,
     list_products,
+    update_product,
 )
 from app.modules.users.models import User
 from app.modules.warehouses.models import Warehouse
 from app.modules.warehouses.use_cases import (
     WarehouseCodeConflictError,
+    WarehouseHasStockError,
     create_warehouse,
+    get_warehouse,
     list_warehouses,
+    update_warehouse,
 )
 
 
@@ -75,10 +82,48 @@ def test_catalog_creation_listing_and_permissions() -> None:
 
         assert product.sku == "BEAUTY-001"
         assert warehouse.code == "MAIN"
-        assert list_products(engine, salesperson, 50, None, False).items == [product]
-        assert list_warehouses(engine, salesperson, 50, None, False).items == [
+        assert list_products(engine, salesperson, 50, None, False, None).items == [
+            product
+        ]
+        assert list_warehouses(engine, salesperson, 50, None, False, None).items == [
             warehouse
         ]
+        assert get_product(engine, salesperson, product.id) == product
+        assert get_warehouse(engine, salesperson, warehouse.id) == warehouse
+
+        updated_product = update_product(
+            engine, admin, product.id, "Updated Shampoo", None
+        )
+        updated_warehouse = update_warehouse(
+            engine, admin, warehouse.id, "Updated Warehouse", None
+        )
+        assert updated_product.name == "Updated Shampoo"
+        assert updated_warehouse.name == "Updated Warehouse"
+
+        with engine.begin() as connection:
+            connection.execute(
+                insert(StockBalance).values(
+                    organization_id=organization_id,
+                    product_id=product.id,
+                    warehouse_id=warehouse.id,
+                    quantity=1,
+                )
+            )
+        with pytest.raises(ProductHasStockError):
+            update_product(engine, admin, product.id, None, False)
+        with pytest.raises(WarehouseHasStockError):
+            update_warehouse(engine, admin, warehouse.id, None, False)
+
+        with engine.begin() as connection:
+            connection.execute(
+                delete(StockBalance).where(
+                    StockBalance.organization_id == organization_id
+                )
+            )
+        assert update_product(engine, admin, product.id, None, False).active is False
+        assert (
+            update_warehouse(engine, admin, warehouse.id, None, False).active is False
+        )
 
         with pytest.raises(ProductSkuConflictError):
             create_product(engine, admin, "BEAUTY-001", "Duplicate")
@@ -88,6 +133,11 @@ def test_catalog_creation_listing_and_permissions() -> None:
             create_product(engine, salesperson, "BEAUTY-002", "Conditioner")
     finally:
         with engine.begin() as connection:
+            connection.execute(
+                delete(StockBalance).where(
+                    StockBalance.organization_id == organization_id
+                )
+            )
             connection.execute(
                 delete(Product).where(Product.organization_id == organization_id)
             )

@@ -2,10 +2,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Engine, and_, insert, or_, select
+from sqlalchemy import Engine, and_, func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.authorization import CurrentMembership, Permission, require_permission
+from app.modules.inventory.models import StockBalance
 from app.modules.products.models import Product
 
 
@@ -17,6 +18,14 @@ class InvalidProductCursorError(Exception):
     pass
 
 
+class ProductNotFoundError(Exception):
+    pass
+
+
+class ProductHasStockError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class ProductItem:
     id: UUID
@@ -24,6 +33,7 @@ class ProductItem:
     name: str
     active: bool
     created_at: datetime
+    updated_at: datetime
 
 
 @dataclass(frozen=True)
@@ -54,6 +64,7 @@ def create_product(
                     Product.name,
                     Product.active,
                     Product.created_at,
+                    Product.updated_at,
                 )
             ).one()
     except IntegrityError as error:
@@ -69,11 +80,23 @@ def list_products(
     limit: int,
     cursor: UUID | None,
     include_inactive: bool,
+    search: str | None,
 ) -> ProductPage:
     require_permission(membership, Permission.INVENTORY_READ)
     filters = [Product.organization_id == membership.organization_id]
     if not include_inactive:
         filters.append(Product.active.is_(True))
+    if search:
+        escaped = (
+            search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        pattern = f"%{escaped}%"
+        filters.append(
+            or_(
+                Product.sku.ilike(pattern, escape="\\"),
+                Product.name.ilike(pattern, escape="\\"),
+            )
+        )
 
     with engine.connect() as connection:
         if cursor is not None:
@@ -101,6 +124,7 @@ def list_products(
                 Product.name,
                 Product.active,
                 Product.created_at,
+                Product.updated_at,
             )
             .where(*filters)
             .order_by(Product.created_at, Product.id)
@@ -113,3 +137,83 @@ def list_products(
         items=[ProductItem(**row._mapping) for row in page_rows],
         next_cursor=page_rows[-1].id if has_more else None,
     )
+
+
+def get_product(
+    engine: Engine,
+    membership: CurrentMembership,
+    product_id: UUID,
+) -> ProductItem:
+    require_permission(membership, Permission.INVENTORY_READ)
+    with engine.connect() as connection:
+        row = connection.execute(
+            select(
+                Product.id,
+                Product.sku,
+                Product.name,
+                Product.active,
+                Product.created_at,
+                Product.updated_at,
+            ).where(
+                Product.organization_id == membership.organization_id,
+                Product.id == product_id,
+            )
+        ).one_or_none()
+    if row is None:
+        raise ProductNotFoundError
+    return ProductItem(**row._mapping)
+
+
+def update_product(
+    engine: Engine,
+    membership: CurrentMembership,
+    product_id: UUID,
+    name: str | None,
+    active: bool | None,
+) -> ProductItem:
+    require_permission(membership, Permission.CATALOG_MANAGE)
+    with engine.begin() as connection:
+        current = connection.execute(
+            select(Product.active)
+            .where(
+                Product.organization_id == membership.organization_id,
+                Product.id == product_id,
+            )
+            .with_for_update()
+        ).one_or_none()
+        if current is None:
+            raise ProductNotFoundError
+
+        if active is False and current.active:
+            quantity = connection.scalar(
+                select(func.coalesce(func.sum(StockBalance.quantity), 0)).where(
+                    StockBalance.organization_id == membership.organization_id,
+                    StockBalance.product_id == product_id,
+                )
+            )
+            if quantity > 0:
+                raise ProductHasStockError
+
+        values = {"updated_at": func.now()}
+        if name is not None:
+            values["name"] = name.strip()
+        if active is not None:
+            values["active"] = active
+
+        row = connection.execute(
+            update(Product)
+            .where(
+                Product.organization_id == membership.organization_id,
+                Product.id == product_id,
+            )
+            .values(**values)
+            .returning(
+                Product.id,
+                Product.sku,
+                Product.name,
+                Product.active,
+                Product.created_at,
+                Product.updated_at,
+            )
+        ).one()
+    return ProductItem(**row._mapping)

@@ -18,6 +18,7 @@ This directory records decisions that affect the product or its architecture. Ea
 | 0010 | [Manage inventory catalogs with organization-scoped keys](0010-manage-inventory-catalogs-with-organization-scoped-keys.md) | Accepted |
 | 0011 | [Bootstrap the first organization through a local command](0011-bootstrap-first-organization-through-a-local-command.md) | Accepted |
 | 0012 | [Invite users with expiring single-use tokens](0012-invite-users-with-expiring-single-use-tokens.md) | Accepted |
+| 0013 | [Manage catalog lifecycle without deleting history](0013-manage-catalog-lifecycle-without-deleting-history.md) | Accepted |
 
 ## Recording a decision
 
