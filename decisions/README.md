@@ -20,6 +20,7 @@ This directory records decisions that affect the product or its architecture. Ea
 | 0012 | [Invite users with expiring single-use tokens](0012-invite-users-with-expiring-single-use-tokens.md) | Accepted |
 | 0013 | [Manage catalog lifecycle without deleting history](0013-manage-catalog-lifecycle-without-deleting-history.md) | Accepted |
 | 0014 | [Transfer stock as one atomic operation](0014-transfer-stock-as-one-atomic-operation.md) | Accepted |
+| 0015 | [Confirm priced sales with controlled discounts](0015-confirm-priced-sales-with-controlled-discounts.md) | Accepted |
 
 ## Recording a decision
 

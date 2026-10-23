@@ -17,6 +17,7 @@ from app.modules.products.use_cases import (
     InvalidProductCursorError,
     ProductHasStockError,
     ProductNotFoundError,
+    ProductPriceBelowCostError,
     ProductSkuConflictError,
     create_product,
     get_product,
@@ -37,7 +38,14 @@ def create_product_endpoint(
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> ProductResponse | Response:
     try:
-        product = create_product(engine, membership, payload.sku, payload.name)
+        product = create_product(
+            engine,
+            membership,
+            payload.sku,
+            payload.name,
+            payload.cost,
+            payload.sale_price,
+        )
     except ProductSkuConflictError:
         return error_response(
             request,
@@ -104,7 +112,13 @@ def update_product_endpoint(
 ) -> ProductResponse | Response:
     try:
         product = update_product(
-            engine, membership, product_id, payload.name, payload.active
+            engine,
+            membership,
+            product_id,
+            payload.name,
+            payload.active,
+            payload.cost,
+            payload.sale_price,
         )
     except ProductNotFoundError:
         return error_response(
@@ -119,5 +133,12 @@ def update_product_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             code="PRODUCT_HAS_STOCK",
             message="A product with stock cannot be deactivated.",
+        )
+    except ProductPriceBelowCostError:
+        return error_response(
+            request,
+            status_code=status.HTTP_409_CONFLICT,
+            code="PRODUCT_PRICE_BELOW_COST",
+            message="The sale price must not be below the product cost.",
         )
     return ProductResponse(**product.__dict__)

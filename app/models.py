@@ -4,6 +4,7 @@ from app.modules.invitations.models import OrganizationInvitation
 from app.modules.memberships.models import Membership
 from app.modules.organizations.models import Organization
 from app.modules.products.models import Product
+from app.modules.sales.models import Sale, SaleLine
 from app.modules.users.models import User
 from app.modules.warehouses.models import Warehouse
 
@@ -13,6 +14,8 @@ __all__ = [
     "Organization",
     "OrganizationInvitation",
     "Product",
+    "Sale",
+    "SaleLine",
     "StockBalance",
     "StockMovement",
     "StockTransfer",

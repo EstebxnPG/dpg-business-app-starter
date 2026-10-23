@@ -127,6 +127,20 @@ Lists use cursor pagination, return active records by default, and accept `inclu
 
 Catalog lists also accept `search` for SKU/code or name. Individual products and warehouses support `GET` and `PATCH` by ID. Names and active state can change, while SKU and warehouse code remain immutable. There are no delete endpoints: historical records stay addressable, and an entity can be deactivated only after its total stock reaches zero.
 
+Products include a current recorded cost and catalog sale price. The catalog price cannot be below cost. Confirmed sale lines copy both values so later catalog changes never rewrite historical revenue or gross-margin inputs.
+
+## Sales API
+
+An authorized administrator or salesperson can confirm a single-warehouse sale with:
+
+```text
+POST /organizations/{organization_id}/sales
+```
+
+The request contains one or more unique product lines and requires an `Idempotency-Key`. Confirmation stores the financial snapshot, decrements every line, and writes linked inventory movements in one transaction. If any line lacks stock, the complete sale rolls back.
+
+Administrators configure the salesperson discount threshold through `PATCH /organizations/{organization_id}/sales/policy` and their personal six-digit approval PIN through `PUT /organizations/{organization_id}/sales/approval-pin`. Routine discounts require a reason. Discounts beyond the configured threshold require an administrator's user ID and PIN; five failed attempts lock that PIN for 15 minutes. Selling below recorded cost is not permitted in this MVP.
+
 ## Organization invitations
 
 An organization administrator can invite an employee with:

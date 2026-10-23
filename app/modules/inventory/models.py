@@ -132,6 +132,11 @@ class StockMovement(Base):
             ["stock_transfers.organization_id", "stock_transfers.id"],
             name="fk_stock_movements_transfer_organization",
         ),
+        ForeignKeyConstraint(
+            ["organization_id", "sale_id"],
+            ["sales.organization_id", "sales.id"],
+            name="fk_stock_movements_sale_organization",
+        ),
         CheckConstraint("quantity > 0", name="ck_stock_movements_positive_quantity"),
         CheckConstraint(
             "movement_type IN ('RECEIPT', 'ISSUE')",
@@ -160,6 +165,7 @@ class StockMovement(Base):
     warehouse_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     performed_by_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     transfer_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    sale_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     movement_type: Mapped[str] = mapped_column(String(16), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     balance_after: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)

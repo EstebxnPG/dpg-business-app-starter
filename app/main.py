@@ -14,6 +14,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.invitations.router import router as invitations_router
 from app.modules.products.router import router as products_router
+from app.modules.sales.router import router as sales_router
 from app.modules.warehouses.router import router as warehouses_router
 
 app = FastAPI(title="DPG Business App Starter", version="0.1.0")
@@ -21,6 +22,7 @@ app.include_router(auth_router)
 app.include_router(inventory_router)
 app.include_router(invitations_router)
 app.include_router(products_router)
+app.include_router(sales_router)
 app.include_router(warehouses_router)
 
 

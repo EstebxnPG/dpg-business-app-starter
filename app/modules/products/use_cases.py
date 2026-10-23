@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import Engine, and_, func, insert, or_, select, update
@@ -26,11 +27,17 @@ class ProductHasStockError(Exception):
     pass
 
 
+class ProductPriceBelowCostError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class ProductItem:
     id: UUID
     sku: str
     name: str
+    cost: Decimal
+    sale_price: Decimal
     active: bool
     created_at: datetime
     updated_at: datetime
@@ -47,6 +54,8 @@ def create_product(
     membership: CurrentMembership,
     sku: str,
     name: str,
+    cost: Decimal,
+    sale_price: Decimal,
 ) -> ProductItem:
     require_permission(membership, Permission.CATALOG_MANAGE)
     try:
@@ -57,11 +66,15 @@ def create_product(
                     organization_id=membership.organization_id,
                     sku=sku.strip().upper(),
                     name=name.strip(),
+                    cost=cost,
+                    sale_price=sale_price,
                 )
                 .returning(
                     Product.id,
                     Product.sku,
                     Product.name,
+                    Product.cost,
+                    Product.sale_price,
                     Product.active,
                     Product.created_at,
                     Product.updated_at,
@@ -122,6 +135,8 @@ def list_products(
                 Product.id,
                 Product.sku,
                 Product.name,
+                Product.cost,
+                Product.sale_price,
                 Product.active,
                 Product.created_at,
                 Product.updated_at,
@@ -151,6 +166,8 @@ def get_product(
                 Product.id,
                 Product.sku,
                 Product.name,
+                Product.cost,
+                Product.sale_price,
                 Product.active,
                 Product.created_at,
                 Product.updated_at,
@@ -170,11 +187,13 @@ def update_product(
     product_id: UUID,
     name: str | None,
     active: bool | None,
+    cost: Decimal | None,
+    sale_price: Decimal | None,
 ) -> ProductItem:
     require_permission(membership, Permission.CATALOG_MANAGE)
     with engine.begin() as connection:
         current = connection.execute(
-            select(Product.active)
+            select(Product.active, Product.cost, Product.sale_price)
             .where(
                 Product.organization_id == membership.organization_id,
                 Product.id == product_id,
@@ -199,6 +218,16 @@ def update_product(
             values["name"] = name.strip()
         if active is not None:
             values["active"] = active
+        effective_cost = cost if cost is not None else current.cost
+        effective_sale_price = (
+            sale_price if sale_price is not None else current.sale_price
+        )
+        if effective_sale_price < effective_cost:
+            raise ProductPriceBelowCostError
+        if cost is not None:
+            values["cost"] = cost
+        if sale_price is not None:
+            values["sale_price"] = sale_price
 
         row = connection.execute(
             update(Product)
@@ -211,6 +240,8 @@ def update_product(
                 Product.id,
                 Product.sku,
                 Product.name,
+                Product.cost,
+                Product.sale_price,
                 Product.active,
                 Product.created_at,
                 Product.updated_at,

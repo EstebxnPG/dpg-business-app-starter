@@ -33,12 +33,14 @@ def test_create_product_normalizes_catalog_values(client, monkeypatch) -> None:
     captured = {}
     timestamp = datetime(2026, 10, 5, tzinfo=UTC)
 
-    def create(engine, membership, sku, name):
-        captured.update(sku=sku, name=name)
+    def create(engine, membership, sku, name, cost, sale_price):
+        captured.update(sku=sku, name=name, cost=cost, sale_price=sale_price)
         return ProductItem(
             id=product_id,
             sku=sku,
             name=name,
+            cost=cost,
+            sale_price=sale_price,
             active=True,
             created_at=timestamp,
             updated_at=timestamp,
@@ -47,11 +49,21 @@ def test_create_product_normalizes_catalog_values(client, monkeypatch) -> None:
     monkeypatch.setattr(products_router, "create_product", create)
     response = client.post(
         f"/organizations/{uuid4()}/products",
-        json={"sku": "  beauty-001 ", "name": "  Shampoo Repair  "},
+        json={
+            "sku": "  beauty-001 ",
+            "name": "  Shampoo Repair  ",
+            "cost": "12000",
+            "sale_price": "20000",
+        },
     )
 
     assert response.status_code == 201
-    assert captured == {"sku": "BEAUTY-001", "name": "Shampoo Repair"}
+    assert captured == {
+        "sku": "BEAUTY-001",
+        "name": "Shampoo Repair",
+        "cost": 12000,
+        "sale_price": 20000,
+    }
     assert response.json()["id"] == str(product_id)
 
 
@@ -68,6 +80,8 @@ def test_list_products_returns_cursor_page(client, monkeypatch) -> None:
                     id=product_id,
                     sku="BEAUTY-001",
                     name="Shampoo Repair",
+                    cost=12000,
+                    sale_price=20000,
                     active=True,
                     created_at=timestamp,
                     updated_at=timestamp,
@@ -121,6 +135,8 @@ def test_product_detail_and_update_contracts(client, monkeypatch) -> None:
         id=product_id,
         sku="BEAUTY-001",
         name="Updated Shampoo",
+        cost=12000,
+        sale_price=20000,
         active=True,
         created_at=timestamp,
         updated_at=timestamp,

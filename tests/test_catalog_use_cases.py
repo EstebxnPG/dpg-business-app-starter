@@ -1,4 +1,5 @@
 import os
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -77,7 +78,9 @@ def test_catalog_creation_listing_and_permissions() -> None:
         )
 
     try:
-        product = create_product(engine, admin, " beauty-001 ", "Shampoo")
+        product = create_product(
+            engine, admin, " beauty-001 ", "Shampoo", Decimal("12000"), Decimal("20000")
+        )
         warehouse = create_warehouse(engine, admin, " main ", "Main Warehouse")
 
         assert product.sku == "BEAUTY-001"
@@ -92,7 +95,7 @@ def test_catalog_creation_listing_and_permissions() -> None:
         assert get_warehouse(engine, salesperson, warehouse.id) == warehouse
 
         updated_product = update_product(
-            engine, admin, product.id, "Updated Shampoo", None
+            engine, admin, product.id, "Updated Shampoo", None, None, None
         )
         updated_warehouse = update_warehouse(
             engine, admin, warehouse.id, "Updated Warehouse", None
@@ -110,7 +113,7 @@ def test_catalog_creation_listing_and_permissions() -> None:
                 )
             )
         with pytest.raises(ProductHasStockError):
-            update_product(engine, admin, product.id, None, False)
+            update_product(engine, admin, product.id, None, False, None, None)
         with pytest.raises(WarehouseHasStockError):
             update_warehouse(engine, admin, warehouse.id, None, False)
 
@@ -120,17 +123,34 @@ def test_catalog_creation_listing_and_permissions() -> None:
                     StockBalance.organization_id == organization_id
                 )
             )
-        assert update_product(engine, admin, product.id, None, False).active is False
+        assert (
+            update_product(engine, admin, product.id, None, False, None, None).active
+            is False
+        )
         assert (
             update_warehouse(engine, admin, warehouse.id, None, False).active is False
         )
 
         with pytest.raises(ProductSkuConflictError):
-            create_product(engine, admin, "BEAUTY-001", "Duplicate")
+            create_product(
+                engine,
+                admin,
+                "BEAUTY-001",
+                "Duplicate",
+                Decimal("12000"),
+                Decimal("20000"),
+            )
         with pytest.raises(WarehouseCodeConflictError):
             create_warehouse(engine, admin, "MAIN", "Duplicate")
         with pytest.raises(PermissionDeniedError):
-            create_product(engine, salesperson, "BEAUTY-002", "Conditioner")
+            create_product(
+                engine,
+                salesperson,
+                "BEAUTY-002",
+                "Conditioner",
+                Decimal("8000"),
+                Decimal("15000"),
+            )
     finally:
         with engine.begin() as connection:
             connection.execute(
