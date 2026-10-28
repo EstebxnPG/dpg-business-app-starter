@@ -4,6 +4,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import Engine, and_, exists, or_, select
+from sqlalchemy.orm import aliased
 
 from app.core.authorization import (
     CurrentMembership,
@@ -11,7 +12,7 @@ from app.core.authorization import (
     Permission,
     require_permission,
 )
-from app.modules.inventory.models import StockBalance, StockMovement
+from app.modules.inventory.models import StockBalance, StockMovement, StockTransfer
 from app.modules.inventory.service import (
     InventoryContextNotFoundError,
     MovementResult,
@@ -24,6 +25,7 @@ from app.modules.inventory.service import (
     transfer_stock,
 )
 from app.modules.products.models import Product
+from app.modules.users.models import User
 from app.modules.warehouses.models import Warehouse
 
 MOVEMENT_PERMISSIONS = {
@@ -84,6 +86,30 @@ class MovementHistoryItem:
 @dataclass(frozen=True)
 class MovementHistoryPage:
     items: list[MovementHistoryItem]
+    next_cursor: UUID | None
+
+
+@dataclass(frozen=True)
+class TransferHistoryItem:
+    id: UUID
+    product_id: UUID
+    source_warehouse_id: UUID
+    source_warehouse_name: str
+    destination_warehouse_id: UUID
+    destination_warehouse_name: str
+    performed_by_id: UUID
+    performed_by_email: str
+    quantity: Decimal
+    source_balance_after: Decimal
+    destination_balance_after: Decimal
+    reason: str
+    reference: str | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class TransferHistoryPage:
+    items: list[TransferHistoryItem]
     next_cursor: UUID | None
 
 
@@ -260,5 +286,96 @@ def list_stock_movements(
     page_rows = rows[:limit]
     return MovementHistoryPage(
         items=[MovementHistoryItem(**row._mapping) for row in page_rows],
+        next_cursor=page_rows[-1].id if has_more else None,
+    )
+
+
+def list_stock_transfers(
+    engine: Engine,
+    membership: CurrentMembership,
+    product_id: UUID,
+    warehouse_id: UUID,
+    limit: int,
+    cursor: UUID | None,
+) -> TransferHistoryPage:
+    require_permission(membership, Permission.INVENTORY_READ)
+    source_warehouse = aliased(Warehouse)
+    destination_warehouse = aliased(Warehouse)
+    filters = [
+        StockTransfer.organization_id == membership.organization_id,
+        StockTransfer.product_id == product_id,
+        or_(
+            StockTransfer.source_warehouse_id == warehouse_id,
+            StockTransfer.destination_warehouse_id == warehouse_id,
+        ),
+    ]
+
+    with engine.connect() as connection:
+        _require_inventory_context(
+            connection,
+            membership.organization_id,
+            product_id,
+            warehouse_id,
+        )
+        if cursor is not None:
+            cursor_row = connection.execute(
+                select(StockTransfer.created_at, StockTransfer.id).where(
+                    *filters, StockTransfer.id == cursor
+                )
+            ).one_or_none()
+            if cursor_row is None:
+                raise InvalidMovementCursorError
+            filters.append(
+                or_(
+                    StockTransfer.created_at < cursor_row.created_at,
+                    and_(
+                        StockTransfer.created_at == cursor_row.created_at,
+                        StockTransfer.id < cursor_row.id,
+                    ),
+                )
+            )
+
+        rows = connection.execute(
+            select(
+                StockTransfer.id,
+                StockTransfer.product_id,
+                StockTransfer.source_warehouse_id,
+                source_warehouse.name.label("source_warehouse_name"),
+                StockTransfer.destination_warehouse_id,
+                destination_warehouse.name.label("destination_warehouse_name"),
+                StockTransfer.performed_by_id,
+                User.email.label("performed_by_email"),
+                StockTransfer.quantity,
+                StockTransfer.source_balance_after,
+                StockTransfer.destination_balance_after,
+                StockTransfer.reason,
+                StockTransfer.reference,
+                StockTransfer.created_at,
+            )
+            .join(
+                source_warehouse,
+                and_(
+                    source_warehouse.organization_id == StockTransfer.organization_id,
+                    source_warehouse.id == StockTransfer.source_warehouse_id,
+                ),
+            )
+            .join(
+                destination_warehouse,
+                and_(
+                    destination_warehouse.organization_id
+                    == StockTransfer.organization_id,
+                    destination_warehouse.id == StockTransfer.destination_warehouse_id,
+                ),
+            )
+            .join(User, User.id == StockTransfer.performed_by_id)
+            .where(*filters)
+            .order_by(StockTransfer.created_at.desc(), StockTransfer.id.desc())
+            .limit(limit + 1)
+        ).all()
+
+    has_more = len(rows) > limit
+    page_rows = rows[:limit]
+    return TransferHistoryPage(
+        items=[TransferHistoryItem(**row._mapping) for row in page_rows],
         next_cursor=page_rows[-1].id if has_more else None,
     )

@@ -44,6 +44,28 @@ class StockTransferResponse(BaseModel):
     replayed: bool
 
 
+class TransferHistoryItemResponse(BaseModel):
+    id: UUID
+    product_id: UUID
+    source_warehouse_id: UUID
+    source_warehouse_name: str
+    destination_warehouse_id: UUID
+    destination_warehouse_name: str
+    performed_by_id: UUID
+    performed_by_email: str
+    quantity: Decimal
+    source_balance_after: Decimal
+    destination_balance_after: Decimal
+    reason: str
+    reference: str | None
+    created_at: datetime
+
+
+class TransferHistoryResponse(BaseModel):
+    items: list[TransferHistoryItemResponse]
+    next_cursor: UUID | None
+
+
 class StockBalanceResponse(BaseModel):
     product_id: UUID
     warehouse_id: UUID

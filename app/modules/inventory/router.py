@@ -14,6 +14,7 @@ from app.modules.inventory.schemas import (
     RecordMovementRequest,
     StockBalanceResponse,
     StockTransferResponse,
+    TransferHistoryResponse,
     TransferStockRequest,
 )
 from app.modules.inventory.service import (
@@ -29,6 +30,7 @@ from app.modules.inventory.use_cases import (
     TransferInventoryCommand,
     get_stock_position,
     list_stock_movements,
+    list_stock_transfers,
     record_manual_stock_movement,
     transfer_inventory,
 )
@@ -256,6 +258,35 @@ def read_movement_history(
             message="The movement cursor is invalid for this inventory context.",
         )
     return MovementHistoryResponse(
+        items=[item.__dict__ for item in page.items],
+        next_cursor=page.next_cursor,
+    )
+
+
+@router.get("/transfers", response_model=TransferHistoryResponse)
+def read_transfer_history(
+    product_id: UUID,
+    warehouse_id: UUID,
+    request: Request,
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+    engine: Annotated[Engine, Depends(get_engine)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: UUID | None = None,
+) -> TransferHistoryResponse | Response:
+    try:
+        page = list_stock_transfers(
+            engine, membership, product_id, warehouse_id, limit, cursor
+        )
+    except InventoryContextNotFoundError:
+        return inventory_context_not_found(request)
+    except InvalidMovementCursorError:
+        return error_response(
+            request,
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_CURSOR",
+            message="The transfer cursor is invalid for this inventory context.",
+        )
+    return TransferHistoryResponse(
         items=[item.__dict__ for item in page.items],
         next_cursor=page.next_cursor,
     )

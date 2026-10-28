@@ -20,7 +20,11 @@ from app.modules.inventory.service import (
     record_stock_movement,
     transfer_stock,
 )
-from app.modules.inventory.use_cases import get_stock_position, list_stock_movements
+from app.modules.inventory.use_cases import (
+    get_stock_position,
+    list_stock_movements,
+    list_stock_transfers,
+)
 from app.modules.memberships.models import Membership
 from app.modules.organizations.models import Organization
 from app.modules.products.models import Product
@@ -193,6 +197,23 @@ def test_movements_update_balance_and_history_atomically() -> None:
 
         assert linked_movements == 2
         assert transfer_count == 1
+
+        transfer_history = list_stock_transfers(
+            engine,
+            CurrentMembership(organization_id, user_id, "warehouse_manager"),
+            product_id,
+            warehouse_id,
+            10,
+            None,
+        )
+        assert len(transfer_history.items) == 1
+        assert transfer_history.items[0].id == transfer.transfer_id
+        assert transfer_history.items[0].source_warehouse_name == "Test Warehouse"
+        assert (
+            transfer_history.items[0].destination_warehouse_name
+            == "Destination Warehouse"
+        )
+        assert transfer_history.items[0].performed_by_email == f"{user_id}@example.com"
 
         with pytest.raises(InsufficientStockError):
             record_stock_movement(engine, command(MovementType.ISSUE, "8"))

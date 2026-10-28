@@ -23,6 +23,8 @@ from app.modules.inventory.use_cases import (
     MovementHistoryItem,
     MovementHistoryPage,
     StockPosition,
+    TransferHistoryItem,
+    TransferHistoryPage,
 )
 
 
@@ -253,6 +255,64 @@ def test_read_movement_history_returns_cursor_page(client, monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json()["items"][0]["id"] == str(movement_id)
     assert response.json()["next_cursor"] == str(next_cursor)
+
+
+def test_read_transfer_history_returns_one_business_event(client, monkeypatch) -> None:
+    transfer_id = uuid4()
+    product_id = uuid4()
+    source_id = uuid4()
+    destination_id = uuid4()
+    actor_id = uuid4()
+    monkeypatch.setattr(
+        inventory_router,
+        "list_stock_transfers",
+        lambda *args: TransferHistoryPage(
+            items=[
+                TransferHistoryItem(
+                    id=transfer_id,
+                    product_id=product_id,
+                    source_warehouse_id=source_id,
+                    source_warehouse_name="Main Store",
+                    destination_warehouse_id=destination_id,
+                    destination_warehouse_name="North Warehouse",
+                    performed_by_id=actor_id,
+                    performed_by_email="operator@example.com",
+                    quantity=Decimal("3"),
+                    source_balance_after=Decimal("7"),
+                    destination_balance_after=Decimal("3"),
+                    reason="Replenishment",
+                    reference="TR-1001",
+                    created_at=datetime(2026, 10, 28, tzinfo=UTC),
+                )
+            ],
+            next_cursor=None,
+        ),
+    )
+
+    response = client.get(
+        f"/organizations/{uuid4()}/inventory/transfers",
+        params={"product_id": product_id, "warehouse_id": source_id},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == [
+        {
+            "id": str(transfer_id),
+            "product_id": str(product_id),
+            "source_warehouse_id": str(source_id),
+            "source_warehouse_name": "Main Store",
+            "destination_warehouse_id": str(destination_id),
+            "destination_warehouse_name": "North Warehouse",
+            "performed_by_id": str(actor_id),
+            "performed_by_email": "operator@example.com",
+            "quantity": "3",
+            "source_balance_after": "7",
+            "destination_balance_after": "3",
+            "reason": "Replenishment",
+            "reference": "TR-1001",
+            "created_at": "2026-10-28T00:00:00Z",
+        }
+    ]
 
 
 def test_history_limit_is_validated_before_query(client) -> None:
