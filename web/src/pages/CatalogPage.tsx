@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Boxes, Plus, Search, Warehouse as WarehouseIcon } from "lucide-react";
+import { Boxes, Pencil, Plus, Search, Warehouse as WarehouseIcon } from "lucide-react";
 import { api, money } from "../api";
 import type { Organization, Product, Warehouse } from "../types";
 import { Button, EmptyState, Field, Modal, PageHeader } from "../ui";
@@ -10,6 +10,8 @@ export function CatalogPage({ token, organization }: { token: string; organizati
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<"product" | "warehouse" | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -41,15 +43,43 @@ export function CatalogPage({ token, organization }: { token: string; organizati
       {error && <div className="form-error">{error}</div>}
       <div className="table-wrap">
         {tab === "products" ? (
-          filteredProducts.length ? <table><thead><tr><th>SKU</th><th>Product</th><th>Cost</th><th>Sale price</th><th>Margin</th><th>Status</th></tr></thead><tbody>{filteredProducts.map((item) => <tr key={item.id}><td className="mono">{item.sku}</td><td><strong>{item.name}</strong></td><td>{money(item.cost)}</td><td>{money(item.sale_price)}</td><td>{money(Number(item.sale_price) - Number(item.cost))}</td><td><span className={`status ${item.active ? "success" : "neutral"}`}>{item.active ? "Active" : "Inactive"}</span></td></tr>)}</tbody></table> : <EmptyState>No products match this view.</EmptyState>
+          filteredProducts.length ? <table><thead><tr><th>SKU</th><th>Product</th><th>Cost</th><th>Sale price</th><th>Margin</th><th>Status</th>{canManage && <th></th>}</tr></thead><tbody>{filteredProducts.map((item) => <tr key={item.id}><td className="mono">{item.sku}</td><td><strong>{item.name}</strong></td><td>{money(item.cost)}</td><td>{money(item.sale_price)}</td><td>{money(Number(item.sale_price) - Number(item.cost))}</td><td><span className={`status ${item.active ? "success" : "neutral"}`}>{item.active ? "Active" : "Inactive"}</span></td>{canManage && <td><Button variant="ghost" onClick={() => setEditingProduct(item)}><Pencil size={15} /> Edit</Button></td>}</tr>)}</tbody></table> : <EmptyState>No products match this view.</EmptyState>
         ) : (
-          filteredWarehouses.length ? <table><thead><tr><th>Code</th><th>Warehouse</th><th>Status</th></tr></thead><tbody>{filteredWarehouses.map((item) => <tr key={item.id}><td className="mono">{item.code}</td><td><strong>{item.name}</strong></td><td><span className={`status ${item.active ? "success" : "neutral"}`}>{item.active ? "Active" : "Inactive"}</span></td></tr>)}</tbody></table> : <EmptyState>No warehouses match this view.</EmptyState>
+          filteredWarehouses.length ? <table><thead><tr><th>Code</th><th>Warehouse</th><th>Status</th>{canManage && <th></th>}</tr></thead><tbody>{filteredWarehouses.map((item) => <tr key={item.id}><td className="mono">{item.code}</td><td><strong>{item.name}</strong></td><td><span className={`status ${item.active ? "success" : "neutral"}`}>{item.active ? "Active" : "Inactive"}</span></td>{canManage && <td><Button variant="ghost" onClick={() => setEditingWarehouse(item)}><Pencil size={15} /> Edit</Button></td>}</tr>)}</tbody></table> : <EmptyState>No warehouses match this view.</EmptyState>
         )}
       </div>
       {modal === "product" && <ProductForm token={token} organizationId={organization.id} onClose={() => setModal(null)} onCreated={() => { setModal(null); load(); }} />}
       {modal === "warehouse" && <WarehouseForm token={token} organizationId={organization.id} onClose={() => setModal(null)} onCreated={() => { setModal(null); load(); }} />}
+      {editingProduct && <EditProductForm product={editingProduct} token={token} organizationId={organization.id} onClose={() => setEditingProduct(null)} onSaved={() => { setEditingProduct(null); void load(); }} />}
+      {editingWarehouse && <EditWarehouseForm warehouse={editingWarehouse} token={token} organizationId={organization.id} onClose={() => setEditingWarehouse(null)} onSaved={() => { setEditingWarehouse(null); void load(); }} />}
     </>
   );
+}
+
+function EditProductForm({ product, token, organizationId, onClose, onSaved }: { product: Product; token: string; organizationId: string; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState({ name: product.name, cost: product.cost, sale_price: product.sale_price, active: product.active });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: React.FormEvent) {
+    event.preventDefault(); setLoading(true); setError("");
+    try { await api(`/organizations/${organizationId}/products/${product.id}`, { method: "PATCH", body: JSON.stringify(form) }, token); onSaved(); }
+    catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Could not update product."); }
+    finally { setLoading(false); }
+  }
+  return <Modal title={`Edit ${product.sku}`} onClose={onClose}><form className="modal-form" onSubmit={submit}><p className="form-note">SKU is permanent because historical documents use it as a business identifier.</p><div className="form-grid"><Field label="Name"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></Field><Field label="Recorded cost"><input type="number" min="0" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} required /></Field><Field label="Catalog price"><input type="number" min="0" step="0.01" value={form.sale_price} onChange={(e) => setForm({ ...form, sale_price: e.target.value })} required /></Field><Field label="Lifecycle"><label className="checkbox-field"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active for new operations</label></Field></div>{!form.active && <div className="warning-message">Deactivation is allowed only after all stock reaches zero.</div>}{error && <div className="form-error">{error}</div>}<footer className="modal-actions"><Button type="button" variant="secondary" onClick={onClose}>Cancel</Button><Button type="submit" loading={loading}>Save changes</Button></footer></form></Modal>;
+}
+
+function EditWarehouseForm({ warehouse, token, organizationId, onClose, onSaved }: { warehouse: Warehouse; token: string; organizationId: string; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState({ name: warehouse.name, active: warehouse.active });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: React.FormEvent) {
+    event.preventDefault(); setLoading(true); setError("");
+    try { await api(`/organizations/${organizationId}/warehouses/${warehouse.id}`, { method: "PATCH", body: JSON.stringify(form) }, token); onSaved(); }
+    catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Could not update warehouse."); }
+    finally { setLoading(false); }
+  }
+  return <Modal title={`Edit ${warehouse.code}`} onClose={onClose}><form className="modal-form" onSubmit={submit}><p className="form-note">Warehouse code remains stable so integrations and historical references do not change.</p><Field label="Name"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></Field><Field label="Lifecycle"><label className="checkbox-field"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active for new operations</label></Field>{!form.active && <div className="warning-message">Deactivation is allowed only after all stock reaches zero.</div>}{error && <div className="form-error">{error}</div>}<footer className="modal-actions"><Button type="button" variant="secondary" onClick={onClose}>Cancel</Button><Button type="submit" loading={loading}>Save changes</Button></footer></form></Modal>;
 }
 
 function ProductForm({ token, organizationId, onClose, onCreated }: { token: string; organizationId: string; onClose: () => void; onCreated: () => void }) {

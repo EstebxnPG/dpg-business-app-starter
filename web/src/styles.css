@@ -187,6 +187,10 @@ tbody tr:hover { background: #fafcf9; }
 .modal-header { height: 58px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 0 18px; position: sticky; top: 0; background: white; z-index: 1; }
 .modal-header h2 { font-size: 17px; margin: 0; }
 .modal-form, .return-form { padding: 18px; display: grid; gap: 14px; }
+.form-note { margin: 0; color: var(--muted); line-height: 1.5; }
+.checkbox-field { min-height: 40px; display: flex; align-items: center; gap: 9px; }
+.checkbox-field input { width: 17px; height: 17px; accent-color: var(--primary); }
+.warning-message { background: #fff8e6; border: 1px solid #eed79a; color: #70540b; border-radius: 6px; padding: 10px 12px; font-size: 13px; }
 .modal-actions, .receipt-actions { display: flex; justify-content: flex-end; gap: 9px; padding-top: 8px; }
 .receipt-header { padding: 18px; display: flex; justify-content: space-between; gap: 15px; }
 .receipt-header > div { display: grid; gap: 4px; }
