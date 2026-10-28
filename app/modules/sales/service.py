@@ -395,7 +395,6 @@ def create_sale(engine: Engine, command: CreateSaleCommand) -> SaleResult:
                     connection.execute(
                         insert(SaleLine).values(
                             sale_id=sale_id,
-                            stock_condition=StockCondition.AVAILABLE.value,
                             product_id=line.product_id,
                             organization_id=command.organization_id,
                             quantity=line.quantity,
@@ -414,6 +413,7 @@ def create_sale(engine: Engine, command: CreateSaleCommand) -> SaleResult:
                             warehouse_id=command.warehouse_id,
                             performed_by_id=command.sold_by_id,
                             sale_id=sale_id,
+                            stock_condition=StockCondition.AVAILABLE.value,
                             movement_type=MovementType.ISSUE.value,
                             quantity=line.quantity,
                             balance_after=balance,
