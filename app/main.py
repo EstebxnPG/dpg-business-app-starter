@@ -15,6 +15,7 @@ from app.database import database_ready
 from app.modules.auth.router import router as auth_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.invitations.router import router as invitations_router
+from app.modules.memberships.router import router as memberships_router
 from app.modules.organizations.router import router as organizations_router
 from app.modules.products.router import router as products_router
 from app.modules.sales.router import router as sales_router
@@ -38,6 +39,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(inventory_router)
 app.include_router(invitations_router)
+app.include_router(memberships_router)
 app.include_router(organizations_router)
 app.include_router(products_router)
 app.include_router(sales_router)

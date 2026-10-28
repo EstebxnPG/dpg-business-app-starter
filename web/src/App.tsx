@@ -8,6 +8,7 @@ import {
   PanelLeftOpen,
   ReceiptText,
   ShoppingCart,
+  Users,
 } from "lucide-react";
 import { api, RequestError } from "./api";
 import { CatalogPage } from "./pages/CatalogPage";
@@ -15,15 +16,17 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { InventoryPage } from "./pages/InventoryPage";
 import { LoginPage } from "./pages/LoginPage";
 import { SalesPage } from "./pages/SalesPage";
+import { TeamPage } from "./pages/TeamPage";
 import type { Organization } from "./types";
 
-type View = "overview" | "catalog" | "inventory" | "sales";
+type View = "overview" | "catalog" | "inventory" | "sales" | "team";
 
 const views = [
   { id: "overview" as const, label: "Overview", icon: BarChart3 },
   { id: "catalog" as const, label: "Catalog", icon: Boxes },
   { id: "inventory" as const, label: "Inventory", icon: PackageSearch },
   { id: "sales" as const, label: "Sales", icon: ShoppingCart },
+  { id: "team" as const, label: "Team", icon: Users },
 ];
 
 export default function App() {
@@ -99,7 +102,7 @@ export default function App() {
           {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
         </button>
         <nav>
-          {views.map(({ id, label, icon: Icon }) => (
+          {views.filter(({ id }) => id !== "team" || organization.role === "admin").map(({ id, label, icon: Icon }) => (
             <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)} title={label}>
               <Icon size={19} /><span>{label}</span>
             </button>
@@ -124,6 +127,7 @@ export default function App() {
           {view === "catalog" && <CatalogPage token={token} organization={organization} />}
           {view === "inventory" && <InventoryPage token={token} organization={organization} />}
           {view === "sales" && <SalesPage token={token} organization={organization} />}
+          {view === "team" && organization.role === "admin" && <TeamPage token={token} organization={organization} />}
         </main>
       </div>
     </div>
