@@ -204,6 +204,7 @@ def test_read_stock_position_returns_current_quantity(client, monkeypatch) -> No
             product_id=product_id,
             warehouse_id=warehouse_id,
             quantity=Decimal("7"),
+            damaged_quantity=Decimal("2"),
         ),
     )
 
@@ -216,6 +217,7 @@ def test_read_stock_position_returns_current_quantity(client, monkeypatch) -> No
         "product_id": str(product_id),
         "warehouse_id": str(warehouse_id),
         "quantity": "7",
+        "damaged_quantity": "2",
     }
 
 
@@ -235,6 +237,7 @@ def test_read_movement_history_returns_cursor_page(client, monkeypatch) -> None:
                     balance_after=Decimal("10"),
                     reason="Supplier delivery",
                     reference="PO-1001",
+                    stock_condition="AVAILABLE",
                     created_at=datetime(2026, 9, 28, tzinfo=UTC),
                 )
             ],

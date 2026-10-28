@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.modules.sales.returns_service import RefundResolution, ReturnDisposition
+
 
 class SaleLineRequest(BaseModel):
     product_id: UUID
@@ -96,6 +98,17 @@ class ReceiptLineResponse(BaseModel):
     line_total: Decimal
 
 
+class SaleAdjustmentResponse(BaseModel):
+    id: UUID
+    kind: str
+    processed_by_id: UUID
+    refund_resolution: str
+    return_value: Decimal
+    refunded_amount: Decimal
+    reason: str
+    created_at: datetime
+
+
 class SaleReceiptResponse(BaseModel):
     sale_id: UUID
     organization_name: str
@@ -110,4 +123,56 @@ class SaleReceiptResponse(BaseModel):
     total: Decimal
     cost_total: Decimal
     created_at: datetime
+    status: str
     lines: list[ReceiptLineResponse]
+    adjustments: list[SaleAdjustmentResponse]
+
+
+class ReturnLineRequest(BaseModel):
+    product_id: UUID
+    quantity: Decimal = Field(gt=0, max_digits=20, decimal_places=6)
+    disposition: ReturnDisposition
+
+
+class CreateSaleReturnRequest(BaseModel):
+    lines: list[ReturnLineRequest] = Field(min_length=1, max_length=100)
+    refund_resolution: RefundResolution
+    reason: str = Field(min_length=1, max_length=240)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Reason must not be blank")
+        return normalized
+
+    @model_validator(mode="after")
+    def product_lines_must_be_unique(self):
+        product_ids = [line.product_id for line in self.lines]
+        if len(product_ids) != len(set(product_ids)):
+            raise ValueError("A product may appear only once in a return")
+        return self
+
+
+class VoidSaleRequest(BaseModel):
+    refund_resolution: RefundResolution
+    reason: str = Field(min_length=1, max_length=240)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Reason must not be blank")
+        return normalized
+
+
+class SaleReturnResponse(BaseModel):
+    sale_return_id: UUID
+    sale_id: UUID
+    kind: str
+    refund_resolution: str
+    return_value: Decimal
+    refunded_amount: Decimal
+    replayed: bool

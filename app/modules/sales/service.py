@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.security import password_hasher
 from app.modules.inventory.models import StockBalance, StockMovement
-from app.modules.inventory.service import MovementType
+from app.modules.inventory.service import MovementType, StockCondition
 from app.modules.memberships.models import Membership
 from app.modules.organizations.models import Organization
 from app.modules.products.models import Product
@@ -321,6 +321,7 @@ def create_sale(engine: Engine, command: CreateSaleCommand) -> SaleResult:
                                 "organization_id": command.organization_id,
                                 "product_id": product_id,
                                 "warehouse_id": command.warehouse_id,
+                                "condition": StockCondition.AVAILABLE.value,
                                 "quantity": Decimal("0"),
                             }
                             for product_id in product_ids
@@ -334,6 +335,7 @@ def create_sale(engine: Engine, command: CreateSaleCommand) -> SaleResult:
                         StockBalance.organization_id == command.organization_id,
                         StockBalance.warehouse_id == command.warehouse_id,
                         StockBalance.product_id.in_(product_ids),
+                        StockBalance.condition == StockCondition.AVAILABLE.value,
                     )
                     .order_by(StockBalance.product_id)
                     .with_for_update()
@@ -382,6 +384,7 @@ def create_sale(engine: Engine, command: CreateSaleCommand) -> SaleResult:
                             StockBalance.organization_id == command.organization_id,
                             StockBalance.product_id == line.product_id,
                             StockBalance.warehouse_id == command.warehouse_id,
+                            StockBalance.condition == StockCondition.AVAILABLE.value,
                             StockBalance.quantity >= line.quantity,
                         )
                         .values(quantity=StockBalance.quantity - line.quantity)
@@ -392,6 +395,7 @@ def create_sale(engine: Engine, command: CreateSaleCommand) -> SaleResult:
                     connection.execute(
                         insert(SaleLine).values(
                             sale_id=sale_id,
+                            stock_condition=StockCondition.AVAILABLE.value,
                             product_id=line.product_id,
                             organization_id=command.organization_id,
                             quantity=line.quantity,

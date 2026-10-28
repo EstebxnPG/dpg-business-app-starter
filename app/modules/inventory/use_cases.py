@@ -17,6 +17,7 @@ from app.modules.inventory.service import (
     MovementResult,
     MovementType,
     RecordMovementCommand,
+    StockCondition,
     TransferResult,
     TransferStockCommand,
     record_stock_movement,
@@ -64,6 +65,7 @@ class StockPosition:
     product_id: UUID
     warehouse_id: UUID
     quantity: Decimal
+    damaged_quantity: Decimal
 
 
 @dataclass(frozen=True)
@@ -75,6 +77,7 @@ class MovementHistoryItem:
     balance_after: Decimal
     reason: str
     reference: str | None
+    stock_condition: str
     created_at: datetime
 
 
@@ -176,18 +179,21 @@ def get_stock_position(
             product_id,
             warehouse_id,
         )
-        quantity = connection.scalar(
-            select(StockBalance.quantity).where(
-                StockBalance.organization_id == membership.organization_id,
-                StockBalance.product_id == product_id,
-                StockBalance.warehouse_id == warehouse_id,
-            )
+        quantities = dict(
+            connection.execute(
+                select(StockBalance.condition, StockBalance.quantity).where(
+                    StockBalance.organization_id == membership.organization_id,
+                    StockBalance.product_id == product_id,
+                    StockBalance.warehouse_id == warehouse_id,
+                )
+            ).all()
         )
 
     return StockPosition(
         product_id=product_id,
         warehouse_id=warehouse_id,
-        quantity=quantity if quantity is not None else Decimal("0"),
+        quantity=quantities.get(StockCondition.AVAILABLE.value, Decimal("0")),
+        damaged_quantity=quantities.get(StockCondition.DAMAGED.value, Decimal("0")),
     )
 
 
@@ -242,6 +248,7 @@ def list_stock_movements(
                 StockMovement.balance_after,
                 StockMovement.reason,
                 StockMovement.reference,
+                StockMovement.stock_condition,
                 StockMovement.created_at,
             )
             .where(*filters)

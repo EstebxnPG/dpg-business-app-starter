@@ -7,15 +7,24 @@ from sqlalchemy import Engine
 from app.core.authorization import CurrentMembership, get_current_membership
 from app.core.errors import error_response
 from app.database import get_engine
+from app.modules.sales.returns_service import (
+    ReturnIdempotencyConflictError,
+    ReturnQuantityExceededError,
+    ReturnSaleNotFoundError,
+    SaleAlreadyAdjustedError,
+)
 from app.modules.sales.schemas import (
     ApprovalPinResponse,
     CreateSaleRequest,
+    CreateSaleReturnRequest,
     SaleListResponse,
     SaleReceiptResponse,
     SaleResponse,
+    SaleReturnResponse,
     SalesPolicyResponse,
     SetApprovalPinRequest,
     UpdateSalesPolicyRequest,
+    VoidSaleRequest,
 )
 from app.modules.sales.service import (
     ApprovalPinLockedError,
@@ -32,15 +41,19 @@ from app.modules.sales.service import (
 from app.modules.sales.use_cases import (
     InvalidSaleCursorError,
     SaleNotFoundError,
+    SubmitReturnLine,
     SubmitSaleApproval,
     SubmitSaleCommand,
     SubmitSaleLine,
+    SubmitSaleReturnCommand,
     get_sale_receipt,
     get_sales_policy,
     list_sales,
     set_approval_pin,
     submit_sale,
+    submit_sale_return,
     update_sales_policy,
+    void_sale,
 )
 
 router = APIRouter(prefix="/organizations/{organization_id}/sales", tags=["sales"])
@@ -189,9 +202,121 @@ def read_sale_receipt(
             message="The sale is unavailable in this organization.",
         )
     return SaleReceiptResponse(
-        **{key: value for key, value in receipt.__dict__.items() if key != "lines"},
+        **{
+            key: value
+            for key, value in receipt.__dict__.items()
+            if key not in {"lines", "adjustments"}
+        },
         lines=[line.__dict__ for line in receipt.lines],
+        adjustments=[adjustment.__dict__ for adjustment in receipt.adjustments],
     )
+
+
+def _return_error_response(request: Request, error: Exception) -> Response:
+    if isinstance(error, ReturnSaleNotFoundError):
+        return error_response(
+            request,
+            status_code=404,
+            code="SALE_NOT_FOUND",
+            message="The sale is unavailable in this organization.",
+        )
+    if isinstance(error, ReturnQuantityExceededError):
+        return error_response(
+            request,
+            status_code=409,
+            code="RETURN_QUANTITY_EXCEEDED",
+            message="The returned quantity exceeds the remaining sold quantity.",
+            details={"product_id": str(error.product_id)},
+        )
+    if isinstance(error, SaleAlreadyAdjustedError):
+        return error_response(
+            request,
+            status_code=409,
+            code="SALE_ALREADY_ADJUSTED",
+            message="This sale cannot be adjusted by the requested operation.",
+        )
+    return error_response(
+        request,
+        status_code=409,
+        code="IDEMPOTENCY_KEY_REUSED",
+        message="The idempotency key was already used with different data.",
+    )
+
+
+@router.post(
+    "/{sale_id}/returns",
+    response_model=SaleReturnResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_sale_return_endpoint(
+    sale_id: UUID,
+    payload: CreateSaleReturnRequest,
+    request: Request,
+    response: Response,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1)],
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+    engine: Annotated[Engine, Depends(get_engine)],
+) -> SaleReturnResponse | Response:
+    try:
+        result = submit_sale_return(
+            engine,
+            membership,
+            SubmitSaleReturnCommand(
+                sale_id=sale_id,
+                lines=tuple(
+                    SubmitReturnLine(line.product_id, line.quantity, line.disposition)
+                    for line in payload.lines
+                ),
+                refund_resolution=payload.refund_resolution,
+                reason=payload.reason,
+                idempotency_key=idempotency_key,
+            ),
+        )
+    except (
+        ReturnSaleNotFoundError,
+        ReturnQuantityExceededError,
+        SaleAlreadyAdjustedError,
+        ReturnIdempotencyConflictError,
+    ) as error:
+        return _return_error_response(request, error)
+    if result.replayed:
+        response.status_code = status.HTTP_200_OK
+    return SaleReturnResponse(**result.__dict__)
+
+
+@router.post(
+    "/{sale_id}/void",
+    response_model=SaleReturnResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def void_sale_endpoint(
+    sale_id: UUID,
+    payload: VoidSaleRequest,
+    request: Request,
+    response: Response,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1)],
+    membership: Annotated[CurrentMembership, Depends(get_current_membership)],
+    engine: Annotated[Engine, Depends(get_engine)],
+) -> SaleReturnResponse | Response:
+    try:
+        result = void_sale(
+            engine,
+            membership,
+            sale_id,
+            payload.refund_resolution,
+            payload.reason,
+            idempotency_key,
+        )
+    except (
+        ReturnSaleNotFoundError,
+        ReturnQuantityExceededError,
+        SaleAlreadyAdjustedError,
+        ReturnIdempotencyConflictError,
+    ) as error:
+        return _return_error_response(request, error)
+    if result.replayed:
+        response.status_code = status.HTTP_200_OK
+    return SaleReturnResponse(**result.__dict__)
 
 
 @router.get("/policy", response_model=SalesPolicyResponse)

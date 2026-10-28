@@ -150,6 +150,19 @@ GET /organizations/{organization_id}/sales/receipts/{sale_id}
 
 Receipt lines preserve the SKU and product name that existed when the sale was confirmed. The JSON receipt is the canonical source for future browser, PDF, messaging, or ESC/POS printer adapters. Electronic invoicing remains a separate integration and must not be inferred from a commercial receipt.
 
+## Returns and voids
+
+Administrators can process partial returns or fully void an untouched sale:
+
+```text
+POST /organizations/{organization_id}/sales/{sale_id}/returns
+POST /organizations/{organization_id}/sales/{sale_id}/void
+```
+
+Returns never edit or delete the original sale. Each returned line is classified as `RESTOCK` or `DAMAGED`; both represent physical stock, but only `AVAILABLE` stock can be sold or transferred. A return also records `REFUNDED_NOW` or `NO_REFUND` in the same operation, avoiding a separate manual completion step. Cumulative returns cannot exceed the quantity originally sold, and a void restores every line to available stock only when no prior return exists.
+
+Sale receipts expose `CONFIRMED`, `PARTIALLY_RETURNED`, `RETURNED`, or `VOIDED` as a derived status and include the complete adjustment history.
+
 ## Organization invitations
 
 An organization administrator can invite an employee with:

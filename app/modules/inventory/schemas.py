@@ -48,6 +48,7 @@ class StockBalanceResponse(BaseModel):
     product_id: UUID
     warehouse_id: UUID
     quantity: Decimal
+    damaged_quantity: Decimal
 
 
 class MovementHistoryItemResponse(BaseModel):
@@ -58,6 +59,7 @@ class MovementHistoryItemResponse(BaseModel):
     balance_after: Decimal
     reason: str
     reference: str | None
+    stock_condition: str
     created_at: datetime
 
 

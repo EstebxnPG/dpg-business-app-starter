@@ -19,6 +19,11 @@ class MovementType(StrEnum):
     ISSUE = "ISSUE"
 
 
+class StockCondition(StrEnum):
+    AVAILABLE = "AVAILABLE"
+    DAMAGED = "DAMAGED"
+
+
 class InvalidMovementQuantityError(ValueError):
     pass
 
@@ -167,6 +172,7 @@ def record_stock_movement(
                         organization_id=command.organization_id,
                         product_id=command.product_id,
                         warehouse_id=command.warehouse_id,
+                        condition=StockCondition.AVAILABLE.value,
                         quantity=command.quantity,
                     )
                     .on_conflict_do_update(
@@ -174,6 +180,7 @@ def record_stock_movement(
                             StockBalance.organization_id,
                             StockBalance.product_id,
                             StockBalance.warehouse_id,
+                            StockBalance.condition,
                         ],
                         set_={"quantity": StockBalance.quantity + command.quantity},
                     )
@@ -186,6 +193,7 @@ def record_stock_movement(
                         StockBalance.organization_id == command.organization_id,
                         StockBalance.product_id == command.product_id,
                         StockBalance.warehouse_id == command.warehouse_id,
+                        StockBalance.condition == StockCondition.AVAILABLE.value,
                         StockBalance.quantity >= command.quantity,
                     )
                     .values(quantity=StockBalance.quantity - command.quantity)
@@ -201,6 +209,7 @@ def record_stock_movement(
                     product_id=command.product_id,
                     warehouse_id=command.warehouse_id,
                     performed_by_id=command.performed_by_id,
+                    stock_condition=StockCondition.AVAILABLE.value,
                     movement_type=command.movement_type.value,
                     quantity=command.quantity,
                     balance_after=balance,
@@ -318,6 +327,7 @@ def transfer_stock(engine: Engine, command: TransferStockCommand) -> TransferRes
                             "organization_id": command.organization_id,
                             "product_id": command.product_id,
                             "warehouse_id": warehouse_id,
+                            "condition": StockCondition.AVAILABLE.value,
                             "quantity": Decimal("0"),
                         }
                         for warehouse_id in (
@@ -336,6 +346,7 @@ def transfer_stock(engine: Engine, command: TransferStockCommand) -> TransferRes
                     StockBalance.warehouse_id.in_(
                         [command.source_warehouse_id, command.destination_warehouse_id]
                     ),
+                    StockBalance.condition == StockCondition.AVAILABLE.value,
                 )
                 .order_by(StockBalance.warehouse_id)
                 .with_for_update()
@@ -347,6 +358,7 @@ def transfer_stock(engine: Engine, command: TransferStockCommand) -> TransferRes
                     StockBalance.organization_id == command.organization_id,
                     StockBalance.product_id == command.product_id,
                     StockBalance.warehouse_id == command.source_warehouse_id,
+                    StockBalance.condition == StockCondition.AVAILABLE.value,
                     StockBalance.quantity >= command.quantity,
                 )
                 .values(quantity=StockBalance.quantity - command.quantity)
@@ -361,6 +373,7 @@ def transfer_stock(engine: Engine, command: TransferStockCommand) -> TransferRes
                     StockBalance.organization_id == command.organization_id,
                     StockBalance.product_id == command.product_id,
                     StockBalance.warehouse_id == command.destination_warehouse_id,
+                    StockBalance.condition == StockCondition.AVAILABLE.value,
                 )
                 .values(quantity=StockBalance.quantity + command.quantity)
                 .returning(StockBalance.quantity)
@@ -392,6 +405,7 @@ def transfer_stock(engine: Engine, command: TransferStockCommand) -> TransferRes
                         "warehouse_id": command.source_warehouse_id,
                         "performed_by_id": command.performed_by_id,
                         "transfer_id": transfer_id,
+                        "stock_condition": StockCondition.AVAILABLE.value,
                         "movement_type": MovementType.ISSUE.value,
                         "quantity": command.quantity,
                         "balance_after": source_balance,
@@ -406,6 +420,7 @@ def transfer_stock(engine: Engine, command: TransferStockCommand) -> TransferRes
                         "warehouse_id": command.destination_warehouse_id,
                         "performed_by_id": command.performed_by_id,
                         "transfer_id": transfer_id,
+                        "stock_condition": StockCondition.AVAILABLE.value,
                         "movement_type": MovementType.RECEIPT.value,
                         "quantity": command.quantity,
                         "balance_after": destination_balance,

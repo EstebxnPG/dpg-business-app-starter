@@ -3,13 +3,22 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Engine, and_, or_, select, update
+from sqlalchemy import Engine, and_, func, or_, select, update
 
 from app.core.authorization import CurrentMembership, Permission, require_permission
 from app.core.security import hash_password
 from app.modules.memberships.models import Membership
 from app.modules.organizations.models import Organization
-from app.modules.sales.models import Sale, SaleLine
+from app.modules.sales.models import Sale, SaleLine, SaleReturn, SaleReturnLine
+from app.modules.sales.returns_service import (
+    ProcessSaleReturnCommand,
+    RefundResolution,
+    ReturnDisposition,
+    ReturnKind,
+    ReturnLineCommand,
+    SaleReturnResult,
+    process_sale_return,
+)
 from app.modules.sales.service import (
     CreateSaleCommand,
     SaleApproval,
@@ -60,6 +69,18 @@ class ReceiptLine:
 
 
 @dataclass(frozen=True)
+class SaleAdjustment:
+    id: UUID
+    kind: str
+    processed_by_id: UUID
+    refund_resolution: str
+    return_value: Decimal
+    refunded_amount: Decimal
+    reason: str
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class SaleReceipt:
     sale_id: UUID
     organization_name: str
@@ -74,7 +95,9 @@ class SaleReceipt:
     total: Decimal
     cost_total: Decimal
     created_at: datetime
+    status: str
     lines: list[ReceiptLine]
+    adjustments: list[SaleAdjustment]
 
 
 @dataclass(frozen=True)
@@ -97,6 +120,22 @@ class SubmitSaleCommand:
     lines: tuple[SubmitSaleLine, ...]
     discount_reason: str | None
     approval: SubmitSaleApproval | None
+    idempotency_key: str
+
+
+@dataclass(frozen=True)
+class SubmitReturnLine:
+    product_id: UUID
+    quantity: Decimal
+    disposition: ReturnDisposition
+
+
+@dataclass(frozen=True)
+class SubmitSaleReturnCommand:
+    sale_id: UUID
+    lines: tuple[SubmitReturnLine, ...]
+    refund_resolution: RefundResolution
+    reason: str
     idempotency_key: str
 
 
@@ -124,6 +163,53 @@ def submit_sale(
                 else None
             ),
             idempotency_key=command.idempotency_key,
+        ),
+    )
+
+
+def submit_sale_return(
+    engine: Engine,
+    membership: CurrentMembership,
+    command: SubmitSaleReturnCommand,
+) -> SaleReturnResult:
+    require_permission(membership, Permission.SALES_RETURN)
+    return process_sale_return(
+        engine,
+        ProcessSaleReturnCommand(
+            organization_id=membership.organization_id,
+            sale_id=command.sale_id,
+            processed_by_id=membership.user_id,
+            kind=ReturnKind.RETURN,
+            refund_resolution=command.refund_resolution,
+            reason=command.reason,
+            idempotency_key=command.idempotency_key,
+            lines=tuple(
+                ReturnLineCommand(line.product_id, line.quantity, line.disposition)
+                for line in command.lines
+            ),
+        ),
+    )
+
+
+def void_sale(
+    engine: Engine,
+    membership: CurrentMembership,
+    sale_id: UUID,
+    refund_resolution: RefundResolution,
+    reason: str,
+    idempotency_key: str,
+) -> SaleReturnResult:
+    require_permission(membership, Permission.SALES_RETURN)
+    return process_sale_return(
+        engine,
+        ProcessSaleReturnCommand(
+            organization_id=membership.organization_id,
+            sale_id=sale_id,
+            processed_by_id=membership.user_id,
+            kind=ReturnKind.VOID,
+            refund_resolution=refund_resolution,
+            reason=reason,
+            idempotency_key=idempotency_key,
         ),
     )
 
@@ -283,8 +369,43 @@ def get_sale_receipt(
             )
             .order_by(SaleLine.product_sku, SaleLine.product_id)
         ).all()
+        adjustments = connection.execute(
+            select(
+                SaleReturn.id,
+                SaleReturn.kind,
+                SaleReturn.processed_by_id,
+                SaleReturn.refund_resolution,
+                SaleReturn.return_value,
+                SaleReturn.refunded_amount,
+                SaleReturn.reason,
+                SaleReturn.created_at,
+            )
+            .where(
+                SaleReturn.organization_id == membership.organization_id,
+                SaleReturn.sale_id == sale_id,
+            )
+            .order_by(SaleReturn.created_at, SaleReturn.id)
+        ).all()
+        returned_quantity = connection.scalar(
+            select(func.coalesce(func.sum(SaleReturnLine.quantity), 0)).where(
+                SaleReturnLine.organization_id == membership.organization_id,
+                SaleReturnLine.sale_id == sale_id,
+            )
+        )
+
+    sold_quantity = sum((line.quantity for line in lines), Decimal("0"))
+    if any(adjustment.kind == "VOID" for adjustment in adjustments):
+        status = "VOIDED"
+    elif returned_quantity == 0:
+        status = "CONFIRMED"
+    elif returned_quantity == sold_quantity:
+        status = "RETURNED"
+    else:
+        status = "PARTIALLY_RETURNED"
 
     return SaleReceipt(
         **sale._mapping,
+        status=status,
         lines=[ReceiptLine(**line._mapping) for line in lines],
+        adjustments=[SaleAdjustment(**row._mapping) for row in adjustments],
     )

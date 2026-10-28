@@ -9,6 +9,11 @@ import app.modules.sales.router as sales_router
 from app.core.authorization import CurrentMembership, get_current_membership
 from app.database import get_engine
 from app.main import app
+from app.modules.sales.returns_service import (
+    RefundResolution,
+    ReturnKind,
+    SaleReturnResult,
+)
 from app.modules.sales.service import (
     DiscountApprovalRequiredError,
     SaleInsufficientStockError,
@@ -193,6 +198,7 @@ def test_list_sales_and_read_receipt(client, monkeypatch) -> None:
         total=Decimal("18000"),
         cost_total=Decimal("12000"),
         created_at=created_at,
+        status="CONFIRMED",
         lines=[
             ReceiptLine(
                 product_id,
@@ -205,6 +211,7 @@ def test_list_sales_and_read_receipt(client, monkeypatch) -> None:
                 Decimal("18000"),
             )
         ],
+        adjustments=[],
     )
     monkeypatch.setattr(
         sales_router, "list_sales", lambda *args: SalePage([summary], None)
@@ -219,3 +226,77 @@ def test_list_sales_and_read_receipt(client, monkeypatch) -> None:
     assert detailed.status_code == 200
     assert detailed.json()["lines"][0]["name"] == "Shampoo"
     assert detailed.json()["total"] == "18000"
+
+
+def test_return_and_void_endpoints_close_financial_outcome(client, monkeypatch) -> None:
+    sale_id = uuid4()
+    product_id = uuid4()
+
+    def result(kind):
+        return SaleReturnResult(
+            sale_return_id=uuid4(),
+            sale_id=sale_id,
+            kind=kind,
+            refund_resolution=RefundResolution.REFUNDED_NOW,
+            return_value=Decimal("18000"),
+            refunded_amount=Decimal("18000"),
+            replayed=False,
+        )
+
+    monkeypatch.setattr(
+        sales_router, "submit_sale_return", lambda *args: result(ReturnKind.RETURN)
+    )
+    monkeypatch.setattr(
+        sales_router, "void_sale", lambda *args: result(ReturnKind.VOID)
+    )
+
+    returned = client.post(
+        f"/organizations/{uuid4()}/sales/{sale_id}/returns",
+        json={
+            "lines": [
+                {
+                    "product_id": str(product_id),
+                    "quantity": "1",
+                    "disposition": "DAMAGED",
+                }
+            ],
+            "refund_resolution": "REFUNDED_NOW",
+            "reason": "Opened product",
+        },
+        headers={"Idempotency-Key": "return-1"},
+    )
+    voided = client.post(
+        f"/organizations/{uuid4()}/sales/{sale_id}/void",
+        json={
+            "refund_resolution": "REFUNDED_NOW",
+            "reason": "Cashier error",
+        },
+        headers={"Idempotency-Key": "void-1"},
+    )
+
+    assert returned.status_code == 201
+    assert returned.json()["kind"] == "RETURN"
+    assert returned.json()["refunded_amount"] == "18000"
+    assert voided.status_code == 201
+    assert voided.json()["kind"] == "VOID"
+
+
+def test_salesperson_cannot_process_returns(client) -> None:
+    response = client.post(
+        f"/organizations/{uuid4()}/sales/{uuid4()}/returns",
+        json={
+            "lines": [
+                {
+                    "product_id": str(uuid4()),
+                    "quantity": "1",
+                    "disposition": "RESTOCK",
+                }
+            ],
+            "refund_resolution": "REFUNDED_NOW",
+            "reason": "Customer return",
+        },
+        headers={"Idempotency-Key": "unauthorized-return"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["details"] == {"required_permission": "sales:return"}

@@ -23,6 +23,7 @@ class Permission(StrEnum):
     MEMBERS_MANAGE = "members:manage"
     SALES_CREATE = "sales:create"
     SALES_READ = "sales:read"
+    SALES_RETURN = "sales:return"
 
 
 ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {

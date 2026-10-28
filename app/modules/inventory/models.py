@@ -33,11 +33,18 @@ class StockBalance(Base):
             name="fk_stock_balances_warehouse_organization",
         ),
         CheckConstraint("quantity >= 0", name="ck_stock_balances_nonnegative"),
+        CheckConstraint(
+            "condition IN ('AVAILABLE', 'DAMAGED')",
+            name="ck_stock_balances_supported_condition",
+        ),
     )
 
     organization_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     product_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     warehouse_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    condition: Mapped[str] = mapped_column(
+        String(16), primary_key=True, server_default=text("AVAILABLE")
+    )
     quantity: Mapped[Decimal] = mapped_column(
         Numeric(20, 6), nullable=False, server_default=text("0")
     )
@@ -137,10 +144,19 @@ class StockMovement(Base):
             ["sales.organization_id", "sales.id"],
             name="fk_stock_movements_sale_organization",
         ),
+        ForeignKeyConstraint(
+            ["organization_id", "sale_return_id"],
+            ["sale_returns.organization_id", "sale_returns.id"],
+            name="fk_stock_movements_sale_return_organization",
+        ),
         CheckConstraint("quantity > 0", name="ck_stock_movements_positive_quantity"),
         CheckConstraint(
             "movement_type IN ('RECEIPT', 'ISSUE')",
             name="ck_stock_movements_supported_type",
+        ),
+        CheckConstraint(
+            "stock_condition IN ('AVAILABLE', 'DAMAGED')",
+            name="ck_stock_movements_supported_condition",
         ),
         UniqueConstraint(
             "organization_id",
@@ -166,6 +182,12 @@ class StockMovement(Base):
     performed_by_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     transfer_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     sale_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    sale_return_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True), nullable=True
+    )
+    stock_condition: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("AVAILABLE")
+    )
     movement_type: Mapped[str] = mapped_column(String(16), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     balance_after: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
