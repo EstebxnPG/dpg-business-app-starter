@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import Engine, insert
+from sqlalchemy import Engine, insert, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.security import hash_password
@@ -23,6 +23,35 @@ class BootstrapResult:
     organization_id: UUID
     admin_user_id: UUID
     admin_email: str
+
+
+@dataclass(frozen=True)
+class OrganizationMembershipItem:
+    id: UUID
+    name: str
+    role: str
+    active: bool
+
+
+def list_user_organizations(
+    engine: Engine, user_id: UUID
+) -> list[OrganizationMembershipItem]:
+    with engine.connect() as connection:
+        rows = connection.execute(
+            select(
+                Organization.id,
+                Organization.name,
+                Membership.role,
+                Organization.active,
+            )
+            .join(
+                Membership,
+                Membership.organization_id == Organization.id,
+            )
+            .where(Membership.user_id == user_id)
+            .order_by(Organization.name, Organization.id)
+        ).all()
+    return [OrganizationMembershipItem(**row._mapping) for row in rows]
 
 
 def bootstrap_organization(
