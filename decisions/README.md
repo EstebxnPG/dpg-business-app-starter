@@ -23,6 +23,7 @@ This directory records decisions that affect the product or its architecture. Ea
 | 0015 | [Confirm priced sales with controlled discounts](0015-confirm-priced-sales-with-controlled-discounts.md) | Accepted |
 | 0016 | [Expose canonical sale receipts before printer adapters](0016-expose-canonical-sale-receipts-before-printer-adapters.md) | Accepted |
 | 0017 | [Record returns as compensating inventory events](0017-record-returns-as-compensating-inventory-events.md) | Accepted |
+| 0018 | [Present business events before inventory ledger effects](0018-present-business-events-before-ledger-effects.md) | Accepted |
 
 ## Recording a decision
 
